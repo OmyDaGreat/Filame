@@ -1,119 +1,244 @@
-= KotlinScriptTemplate
+= Filame - Arch Linux Configuration Manager
 
-A template for creating Kotlin command-line applications with automated GitHub releases and Scoop package publishing.
+A powerful terminal tool for managing Arch Linux configurations across multiple devices with integrated GitHub repository syncing and ignore patterns support. Built with Varabyte's Kotter for a beautiful terminal UI.
 
 == Overview
 
-This template provides a simple structure for Kotlin applications with:
+Filame helps you:
 
-- Single Kotlin source file
-- Batch file for easy execution
-- GitHub Actions workflow for automated releases
-- Scoop manifest generation and publishing
+- *Sync configurations* across multiple Arch Linux devices
+- *Track dotfiles* and system configurations in a centralized location
+- *Integrate with GitHub* for version control and backup
+- *Manage ignore patterns* to exclude sensitive or unnecessary files
+- *Beautiful terminal UI* powered by Kotter with color-coded output
+
+== Features
+
+✨ *Device Management* - Configure unique device names for each system
+🔄 *Bidirectional Sync* - Export local configs to repo or import from repo
+🌐 *GitHub Integration* - Pull and push changes with full Git support
+📋 *Configuration Tracking* - Track any file or directory on your system
+🚫 *Ignore Patterns* - Exclude files with glob patterns
+🎨 *Terminal UI* - Beautiful color-coded interface using Kotter
 
 == Prerequisites
 
-- Java 21
-- Kotlin 2.1.10
+- Java 21 or higher
+- Kotlin 2.2.20
 - Git
+- Arch Linux (or any Linux distribution)
 
-== Getting Started
+== Installation
 
-1. Clone this template repository:
+1. Clone this repository:
 +
-[source]
+[source,bash]
 ----
-git clone https://github.com/YOUR-USERNAME/KotlinScriptTemplate.git
-cd KotlinScriptTemplate
+git clone https://github.com/OmyDaGreat/Filame.git
+cd Filame
 ----
 
-2. Modify the `Runner.kt` file with your application logic.
-
-3. Build the project:
+2. Build the project:
 +
-[source]
+[source,bash]
 ----
-kotlinc Runner.kt -include-runtime -d build/runner.jar
+./gradlew build
 ----
 
-4. Run the application:
+3. Run the application:
 +
-[source]
+[source,bash]
 ----
-runner.bat hello
+./gradlew run
 ----
 
-== Customizing the Template
+== Quick Start Guide
 
-1. Rename the main Kotlin file from `Runner.kt` to your application name.
-2. Update the batch file name from `runner.bat` to match your application.
-3. Edit `.kommit.yaml` to customize commit message types and scopes as needed.
+=== First Time Setup
 
-== Configuring Automated Releases
+1. Run Filame for the first time:
++
+[source,bash]
+----
+./gradlew run
+----
 
-Update the environment variables in `.github/workflows/release.yml.tmp` (and remove its `.tmp` extension):
+2. Select option *1. Configure settings*
 
+3. Enter your device name (e.g., "arch-laptop")
+
+4. Enter your GitHub repository URL (e.g., "https://github.com/username/dotfiles.git")
+
+=== Adding Configuration Files
+
+1. From the main menu, select *2. Add configuration file*
+
+2. Enter the source path (e.g., `~/.config/i3/config`)
+
+3. Enter the destination path in repo (e.g., `i3/config`)
+
+4. Optionally enter a description
+
+=== Exporting Configurations
+
+1. Select *4. Export configs to repo*
+
+2. Your local configuration files will be copied to the repository directory
+
+=== Syncing with GitHub
+
+*To pull latest changes:*
+- Select *6. Sync with GitHub (pull)*
+
+*To push your changes:*
+- First, export your configs (option 4)
+- Select *7. Sync with GitHub (push)*
+- Enter a commit message
+- Changes will be committed and pushed to GitHub
+
+=== Managing Ignore Patterns
+
+1. Select *8. Manage ignore patterns*
+
+2. Add or remove patterns (e.g., `*.log`, `*.tmp`, `.cache/*`)
+
+== Configuration File
+
+Filame stores its configuration in `~/.config/filame/config.yaml`
+
+Example configuration:
 [source,yaml]
 ----
-env:
-  KT_NAME: YourAppName          # Main Kotlin file name (without .kt)
-  APP_NAME: yourappname         # Name for compiled app (lowercase)
-  REPO_LOCATION: https://github.com/YOUR-USERNAME/YourRepository
-  BUCKET_LOCATION: YOUR-USERNAME/YourBucket
-  BUCKET_NAME: yourbucket
-  DESCRIPTION: Your application description
-  JAVA_VERSION: '21'           # Required Java version
-  KOTLIN_VERSION: '2.1.10'     # Required Kotlin version
+deviceName: arch-laptop
+githubRepo: https://github.com/username/dotfiles.git
+configFiles:
+  - sourcePath: /home/user/.config/i3/config
+    destinationPath: i3/config
+    description: i3 window manager configuration
+  - sourcePath: /home/user/.bashrc
+    destinationPath: bashrc
+    description: Bash configuration
+ignorePatterns:
+  - "*.log"
+  - "*.tmp"
+  - ".cache/*"
+  - "*.lock"
 ----
 
-== Setting Up Scoop Publishing
+== Usage Examples
 
-1. Create a Scoop bucket repository if you don't have one.
+=== Tracking Common Dotfiles
 
-2. Create a Personal Access Token with `repo` permissions in GitHub:
-- Go to Settings > Developer settings > Personal access tokens
-- Generate a new token with `repo` scope
-- Copy the token
+Add these common Arch Linux configuration files:
 
-3. Add the token as a repository secret:
-- Go to your repository settings
-- Select "Secrets and variables" > "Actions"
-- Add a new secret named `REPO_ACCESS_TOKEN` with your token
+[source]
+----
+Source: ~/.config/i3/config          → Destination: i3/config
+Source: ~/.config/polybar/config     → Destination: polybar/config
+Source: ~/.bashrc                    → Destination: bashrc
+Source: ~/.zshrc                     → Destination: zshrc
+Source: ~/.vimrc                     → Destination: vimrc
+Source: /etc/pacman.conf            → Destination: pacman.conf
+----
 
-4. Add the workflow file to your Scoop bucket repository:
-- Create a file at `.github/workflows/update-runner.yml` in your bucket repository
-- Copy the content from `update-runner.yml.tmp` in this template
-- Update the environment variables to match your application settings
+=== Setting Up Multiple Devices
+
+1. On your first device, configure Filame and add your config files
+
+2. Export configs and push to GitHub
+
+3. On your second device, configure Filame with the same GitHub repo
+
+4. Pull from GitHub to get the latest configs
+
+5. Import configs to apply them to the new device
+
+== Building and Development
+
+=== Build the project:
+[source,bash]
+----
+./gradlew build
+----
+
+=== Run tests:
+[source,bash]
+----
+./gradlew test
+----
+
+=== Create a distribution:
+[source,bash]
+----
+./gradlew distZip
+----
+
+The distribution will be created in `app/build/distributions/`
+
+== Technical Details
+
+*Built with:*
+- Kotlin 2.2.20
+- Varabyte's Kotter 1.1.2 for terminal UI
+- JGit 6.10.0 for Git operations
+- Kotlinx Serialization for configuration
+- KAML for YAML parsing
+
+== Roadmap
+
+- [ ] Support for encrypted sensitive files
+- [ ] Automatic backup before applying changes
+- [ ] Diff viewer before importing configs
+- [ ] Template system for config files
+- [ ] Support for multiple GitHub repositories
+- [ ] Interactive file browser
+- [ ] Configuration profiles
+== Troubleshooting
+
+=== Git Authentication Issues
+
+If you encounter authentication issues when pushing to GitHub:
+
+1. *Using SSH:* Make sure you have an SSH key set up and added to your GitHub account
 +
-[source,yaml]
+[source,bash]
 ----
-env:
-  KT_NAME: YourAppName          # Main Kotlin file name (without .kt)
-  APP_NAME: yourappname         # Name for compiled app (lowercase)
-  REPO_LOCATION: https://github.com/YOUR-USERNAME/YourRepository
-  BUCKET_LOCATION: YOUR-USERNAME/YourBucket
-  BUCKET_NAME: yourbucket
-  DESCRIPTION: Your application description
-  JAVA_VERSION: '21'
-  KOTLIN_VERSION: '2.1.10'
+ssh-keygen -t ed25519 -C "your_email@example.com"
+ssh-add ~/.ssh/id_ed25519
 ----
 
-5. When a new release is created, the workflow will:
-- Build your application
-- Package it as a ZIP
-- Create a GitHub release
-- Generate a Scoop manifest
-- Send a dispatch event to your Scoop bucket repository
-- The bucket repository will automatically update with the new version information
+2. *Using HTTPS:* Configure Git credentials or use a personal access token
++
+[source,bash]
+----
+git config --global credential.helper store
+----
 
-== Manual Version Bumps
+3. Use SSH URLs instead of HTTPS for better authentication
 
-Trigger a manual release with a specific version bump:
+=== Configuration Not Saving
 
-1. Go to the Actions tab in your repository
-2. Select the "Build and Release" workflow
-3. Click "Run workflow"
-4. Choose version bump type: patch, minor, or major
+Make sure you have write permissions to `~/.config/filame/`
+
+[source,bash]
+----
+mkdir -p ~/.config/filame
+chmod 755 ~/.config/filame
+----
+
+=== Repository Clone Failures
+
+Ensure the GitHub repository URL is correct and you have access to it. For private repositories, make sure your Git credentials are configured.
+
+== Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'feat: Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 == Commit Message Convention
 
@@ -126,4 +251,14 @@ This project uses a customizable commit convention defined in `.kommit.yaml`:
 
 == License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+== Acknowledgments
+
+- Built with ❤️ for the Arch Linux community
+- Powered by https://github.com/varabyte/kotter[Varabyte's Kotter] for terminal UI
+- Uses https://www.eclipse.org/jgit/[JGit] for Git operations
+
+== Author
+
+Om Gupta (@OmyDaGreat)
