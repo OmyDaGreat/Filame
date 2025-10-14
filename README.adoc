@@ -243,13 +243,18 @@ Source: /etc/pacman.conf            → Destination: pacman.conf
 ./gradlew test
 ----
 
-=== Create a JAR file:
+=== Create a standalone JAR file:
 [source,bash]
 ----
-./gradlew build
+./gradlew shadowJar
 ----
 
-The JAR file will be created in `app/build/libs/runner.jar`
+The self-contained JAR file will be created in `app/build/libs/filame.jar` and can be run with:
+
+[source,bash]
+----
+java -jar app/build/libs/filame.jar
+----
 
 == Technical Details
 

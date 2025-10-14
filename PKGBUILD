@@ -13,7 +13,7 @@ sha256sums=('SKIP')
 
 build() {
     cd "$srcdir/Filame-$pkgver"
-    gradle build --no-daemon
+    gradle shadowJar --no-daemon
 }
 
 package() {
@@ -24,7 +24,7 @@ package() {
     install -dm755 "$pkgdir/usr/bin"
     
     # Install the JAR file
-    install -Dm644 app/build/libs/runner.jar "$pkgdir/usr/share/java/$pkgname/$pkgname.jar"
+    install -Dm644 app/build/libs/filame.jar "$pkgdir/usr/share/java/$pkgname/$pkgname.jar"
     
     # Create launcher script
     cat > "$pkgdir/usr/bin/$pkgname" << EOF
