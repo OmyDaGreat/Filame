@@ -37,6 +37,28 @@ Filame helps you:
 
 == Installation
 
+=== From AUR (Arch Linux)
+
+Install using your preferred AUR helper:
+
+[source,bash]
+----
+yay -S filame
+# or
+paru -S filame
+----
+
+Or manually:
+
+[source,bash]
+----
+git clone https://aur.archlinux.org/filame.git
+cd filame
+makepkg -si
+----
+
+=== From Source
+
 1. Clone this repository:
 +
 [source,bash]
@@ -221,13 +243,13 @@ Source: /etc/pacman.conf            → Destination: pacman.conf
 ./gradlew test
 ----
 
-=== Create a distribution:
+=== Create a JAR file:
 [source,bash]
 ----
-./gradlew distZip
+./gradlew build
 ----
 
-The distribution will be created in `app/build/distributions/`
+The JAR file will be created in `app/build/libs/runner.jar`
 
 == Technical Details
 
