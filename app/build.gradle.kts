@@ -27,7 +27,7 @@ dependencies {
     implementation("com.varabyte.kotter:kotter:1.1.2")
     
     // JGit for Git operations
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.1.202505221210-r")
     
     // Kotlinx serialization for config management
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
