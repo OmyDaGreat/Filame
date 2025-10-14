@@ -64,7 +64,7 @@ class GitManagerTest {
     
     @Test
     fun testExportConfigsWithNonExistentFiles() {
-        val testDir = File("/tmp/filame-test-${System.currentTimeMillis()}")
+        val testDir = File(System.getProperty("java.io.tmpdir"), "filame-test-${System.currentTimeMillis()}")
         testDir.mkdirs()
         
         val config = FilameConfig(
