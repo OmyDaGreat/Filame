@@ -12,6 +12,9 @@ plugins {
 
     // Apply the application plugin to add support for building a CLI application in Java.
     application
+    
+    // Kotlinx serialization plugin
+    kotlin("plugin.serialization") version "2.2.20"
 }
 
 repositories {
@@ -20,8 +23,20 @@ repositories {
 }
 
 dependencies {
-    // This dependency is used by the application.
-    implementation(libs.guava)
+    // Kotter for terminal UI
+    implementation("com.varabyte.kotter:kotter:1.1.2")
+    
+    // JGit for Git operations
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+    
+    // Kotlinx serialization for config management
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    
+    // YAML parsing
+    implementation("com.charleskorn.kaml:kaml:0.61.0")
+    
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
 testing {
