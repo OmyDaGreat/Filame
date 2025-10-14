@@ -6,6 +6,54 @@ This directory contains the files needed to publish Filame to the Arch User Repo
 
 - `PKGBUILD` - The build script for creating the Arch package
 - `.SRCINFO` - Metadata file for the AUR (auto-generated from PKGBUILD)
+- `.github/workflows/aur-publish.yml` - Automated publishing workflow
+
+## Automated Publishing
+
+The project uses GitHub Actions to automatically publish releases to the AUR. The workflow:
+
+1. **Triggers on**:
+   - Manual workflow dispatch (for new releases)
+   - Git tags starting with `v*`
+
+2. **Automated steps**:
+   - Builds the shadow JAR
+   - Calculates SHA256 checksums
+   - Updates PKGBUILD and .SRCINFO with new version
+   - Creates a GitHub release
+   - Publishes to AUR automatically
+
+### Required GitHub Secrets
+
+Configure these secrets in your repository settings:
+
+- `AUR_USERNAME` - Your AUR username
+- `AUR_EMAIL` - Your email associated with AUR account
+- `AUR_SSH_PRIVATE_KEY` - SSH private key for AUR authentication
+
+### Creating a New Release
+
+#### Option 1: Workflow Dispatch (Recommended)
+
+1. Go to Actions → "Build and Publish to AUR"
+2. Click "Run workflow"
+3. Select version bump type (patch/minor/major)
+4. Click "Run workflow"
+
+The workflow will automatically:
+- Bump the version
+- Create a git tag
+- Build and release
+- Update AUR
+
+#### Option 2: Manual Git Tag
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+The workflow will trigger automatically and publish to AUR.
 
 ## Publishing to AUR
 

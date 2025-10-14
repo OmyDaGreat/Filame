@@ -39,6 +39,8 @@ Filame helps you:
 
 === From AUR (Arch Linux)
 
+NOTE: New releases are automatically published to the AUR via GitHub Actions.
+
 Install using your preferred AUR helper:
 
 [source,bash]
