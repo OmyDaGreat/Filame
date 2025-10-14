@@ -1,4 +1,4 @@
-package org.example
+package xyz.malefic
 
 import kotlinx.serialization.Serializable
 import java.io.File
@@ -11,12 +11,13 @@ data class FilameConfig(
     val deviceName: String = "",
     val githubRepo: String = "",
     val configFiles: List<ConfigFile> = emptyList(),
-    val ignorePatterns: List<String> = listOf(
-        "*.log",
-        "*.tmp",
-        ".cache/*",
-        "*.lock"
-    )
+    val ignorePatterns: List<String> =
+        listOf(
+            "*.log",
+            "*.tmp",
+            ".cache/*",
+            "*.lock",
+        ),
 )
 
 /**
@@ -26,7 +27,7 @@ data class FilameConfig(
 data class ConfigFile(
     val sourcePath: String,
     val destinationPath: String,
-    val description: String = ""
+    val description: String = "",
 )
 
 /**
@@ -35,14 +36,14 @@ data class ConfigFile(
 object ConfigManager {
     private val configDir = File(System.getProperty("user.home"), ".config/filame")
     private val configFile = File(configDir, "config.yaml")
-    
+
     fun ensureConfigDir() {
         if (!configDir.exists()) {
             configDir.mkdirs()
         }
     }
-    
+
     fun getConfigFile(): File = configFile
-    
+
     fun configExists(): Boolean = configFile.exists()
 }

@@ -1,4 +1,4 @@
-package org.example
+package xyz.malefic
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.errors.GitAPIException
@@ -10,9 +10,11 @@ import java.nio.file.StandardCopyOption
 /**
  * Manages Git operations for syncing configuration files
  */
-class GitManager(private val config: FilameConfig) {
+class GitManager(
+    private val config: FilameConfig,
+) {
     private val repoDir = File(System.getProperty("user.home"), ".config/filame/repo")
-    
+
     /**
      * Initialize or clone the repository
      */
@@ -26,38 +28,42 @@ class GitManager(private val config: FilameConfig) {
                 }
                 repoDir.mkdirs()
                 Result.success(
-                    Git.cloneRepository()
+                    Git
+                        .cloneRepository()
                         .setURI(config.githubRepo)
                         .setDirectory(repoDir)
-                        .call()
+                        .call(),
                 )
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
-    
+
     /**
      * Pull latest changes from remote
      */
-    fun pull(git: Git): Result<Unit> {
-        return try {
+    fun pull(git: Git): Result<Unit> =
+        try {
             git.pull().call()
             Result.success(Unit)
         } catch (e: GitAPIException) {
             Result.failure(e)
         }
-    }
-    
+
     /**
      * Push changes to remote
      */
-    fun push(git: Git, username: String? = null, token: String? = null): Result<Unit> {
-        return try {
+    fun push(
+        git: Git,
+        username: String? = null,
+        token: String? = null,
+    ): Result<Unit> =
+        try {
             val pushCommand = git.push()
             if (username != null && token != null) {
                 pushCommand.setCredentialsProvider(
-                    UsernamePasswordCredentialsProvider(username, token)
+                    UsernamePasswordCredentialsProvider(username, token),
                 )
             }
             pushCommand.call()
@@ -65,21 +71,22 @@ class GitManager(private val config: FilameConfig) {
         } catch (e: GitAPIException) {
             Result.failure(e)
         }
-    }
-    
+
     /**
      * Commit changes
      */
-    fun commit(git: Git, message: String): Result<Unit> {
-        return try {
+    fun commit(
+        git: Git,
+        message: String,
+    ): Result<Unit> =
+        try {
             git.add().addFilepattern(".").call()
             git.commit().setMessage(message).call()
             Result.success(Unit)
         } catch (e: GitAPIException) {
             Result.failure(e)
         }
-    }
-    
+
     /**
      * Copy configuration files to repository
      */
@@ -91,14 +98,14 @@ class GitManager(private val config: FilameConfig) {
                 if (!source.exists()) {
                     continue
                 }
-                
+
                 val destination = File(repoDir, configFile.destinationPath)
                 destination.parentFile?.mkdirs()
-                
+
                 Files.copy(
                     source.toPath(),
                     destination.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING
+                    StandardCopyOption.REPLACE_EXISTING,
                 )
                 exportedFiles.add(configFile.destinationPath)
             }
@@ -107,7 +114,7 @@ class GitManager(private val config: FilameConfig) {
             return Result.failure(e)
         }
     }
-    
+
     /**
      * Copy configuration files from repository to system
      */
@@ -119,14 +126,14 @@ class GitManager(private val config: FilameConfig) {
                 if (!source.exists()) {
                     continue
                 }
-                
+
                 val destination = File(configFile.sourcePath)
                 destination.parentFile?.mkdirs()
-                
+
                 Files.copy(
                     source.toPath(),
                     destination.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING
+                    StandardCopyOption.REPLACE_EXISTING,
                 )
                 importedFiles.add(configFile.sourcePath)
             }
@@ -135,6 +142,6 @@ class GitManager(private val config: FilameConfig) {
             return Result.failure(e)
         }
     }
-    
+
     fun getRepoDir(): File = repoDir
 }

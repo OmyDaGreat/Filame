@@ -1,12 +1,9 @@
-package org.example
+package xyz.malefic
 
+import com.charleskorn.kaml.Yaml
 import com.varabyte.kotter.foundation.*
 import com.varabyte.kotter.foundation.text.*
-import com.charleskorn.kaml.Yaml
-import kotlinx.serialization.encodeToString
-import java.io.File
 import java.util.Scanner
-import kotlin.system.exitProcess
 
 /**
  * Filame - File manager for Arch Linux configurations
@@ -17,10 +14,10 @@ fun main(args: Array<String>) {
         println("Hello World!")
         return
     }
-    
+
     ConfigManager.ensureConfigDir()
     val config = loadOrCreateConfig()
-    
+
     showMainMenu(config)
 }
 
@@ -31,7 +28,7 @@ private val scanner = Scanner(System.`in`)
  */
 fun loadOrCreateConfig(): FilameConfig {
     val configFile = ConfigManager.getConfigFile()
-    
+
     return if (configFile.exists()) {
         try {
             val yaml = configFile.readText()
@@ -64,25 +61,29 @@ fun saveConfig(config: FilameConfig) {
 fun showMainMenu(initialConfig: FilameConfig) {
     var config = initialConfig
     var running = true
-    
+
     while (running) {
         session {
             section {
                 cyan { textLine("╔════════════════════════════════════════╗") }
-                cyan { text("║  "); white { text("FILAME - Arch Config Manager") }; cyan { textLine("      ║") } }
+                cyan {
+                    text("║  ")
+                    white { text("FILAME - Arch Config Manager") }
+                    cyan { textLine("      ║") }
+                }
                 cyan { textLine("╚════════════════════════════════════════╝") }
                 textLine()
-                
+
                 if (config.deviceName.isEmpty()) {
                     yellow { textLine("⚠ Configuration not set up. Please configure first.") }
                     textLine()
                 }
-                
+
                 textLine("Current device: ${config.deviceName.ifEmpty { "Not set" }}")
                 textLine("GitHub repo: ${config.githubRepo.ifEmpty { "Not set" }}")
                 textLine("Config files: ${config.configFiles.size}")
                 textLine()
-                
+
                 green { textLine("1. Configure settings") }
                 green { textLine("2. Add configuration file") }
                 green { textLine("3. List configuration files") }
@@ -93,13 +94,13 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 green { textLine("8. Manage ignore patterns") }
                 cyan { textLine("9. Exit") }
                 textLine()
-                
+
                 text("Select an option: ")
             }.run()
         }
-        
+
         val choice = scanner.nextLine()
-        
+
         when (choice) {
             "1" -> config = configureSettings(config)
             "2" -> config = addConfigFile(config)
@@ -125,7 +126,7 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 }
             }
         }
-        
+
         if (running) {
             println("\nPress Enter to continue...")
             scanner.nextLine()
@@ -143,26 +144,27 @@ fun configureSettings(config: FilameConfig): FilameConfig {
             textLine()
         }.run()
     }
-    
+
     print("Enter device name (current: ${config.deviceName}): ")
     val deviceName = scanner.nextLine().ifEmpty { config.deviceName }
-    
+
     print("Enter GitHub repository URL (current: ${config.githubRepo}): ")
     val githubRepo = scanner.nextLine().ifEmpty { config.githubRepo }
-    
-    val newConfig = config.copy(
-        deviceName = deviceName,
-        githubRepo = githubRepo
-    )
-    
+
+    val newConfig =
+        config.copy(
+            deviceName = deviceName,
+            githubRepo = githubRepo,
+        )
+
     saveConfig(newConfig)
-    
+
     session {
         section {
             green { textLine("✓ Settings saved successfully!") }
         }.run()
     }
-    
+
     return newConfig
 }
 
@@ -176,10 +178,10 @@ fun addConfigFile(config: FilameConfig): FilameConfig {
             textLine()
         }.run()
     }
-    
+
     print("Enter source path (e.g., ~/.config/i3/config): ")
     val sourcePath = scanner.nextLine()
-    
+
     if (sourcePath.isEmpty()) {
         session {
             section {
@@ -188,10 +190,10 @@ fun addConfigFile(config: FilameConfig): FilameConfig {
         }
         return config
     }
-    
+
     print("Enter destination path in repo (e.g., i3/config): ")
     val destPath = scanner.nextLine()
-    
+
     if (destPath.isEmpty()) {
         session {
             section {
@@ -200,22 +202,22 @@ fun addConfigFile(config: FilameConfig): FilameConfig {
         }
         return config
     }
-    
+
     print("Enter description (optional): ")
     val description = scanner.nextLine()
-    
+
     val expandedPath = sourcePath.replace("~", System.getProperty("user.home"))
     val configFile = ConfigFile(expandedPath, destPath, description)
     val newConfig = config.copy(configFiles = config.configFiles + configFile)
-    
+
     saveConfig(newConfig)
-    
+
     session {
         section {
             green { textLine("✓ Configuration file added successfully!") }
         }.run()
     }
-    
+
     return newConfig
 }
 
@@ -227,7 +229,7 @@ fun listConfigFiles(config: FilameConfig) {
         section {
             cyan { textLine("═══ Configuration Files ═══") }
             textLine()
-            
+
             if (config.configFiles.isEmpty()) {
                 yellow { textLine("No configuration files tracked yet.") }
             } else {
@@ -257,7 +259,7 @@ fun exportConfigs(config: FilameConfig) {
             textLine()
         }.run()
     }
-    
+
     if (config.githubRepo.isEmpty()) {
         session {
             section {
@@ -266,10 +268,10 @@ fun exportConfigs(config: FilameConfig) {
         }
         return
     }
-    
+
     val gitManager = GitManager(config)
     val gitResult = gitManager.initializeRepo()
-    
+
     if (gitResult.isFailure) {
         session {
             section {
@@ -278,11 +280,11 @@ fun exportConfigs(config: FilameConfig) {
         }
         return
     }
-    
+
     println("Exporting configuration files...")
-    
+
     val exportResult = gitManager.exportConfigs()
-    
+
     if (exportResult.isSuccess) {
         val files = exportResult.getOrNull() ?: emptyList()
         session {
@@ -313,7 +315,7 @@ fun importConfigs(config: FilameConfig) {
             textLine()
         }.run()
     }
-    
+
     if (config.githubRepo.isEmpty()) {
         session {
             section {
@@ -322,10 +324,10 @@ fun importConfigs(config: FilameConfig) {
         }
         return
     }
-    
+
     val gitManager = GitManager(config)
     val gitResult = gitManager.initializeRepo()
-    
+
     if (gitResult.isFailure) {
         session {
             section {
@@ -334,11 +336,11 @@ fun importConfigs(config: FilameConfig) {
         }
         return
     }
-    
+
     println("Importing configuration files...")
-    
+
     val importResult = gitManager.importConfigs()
-    
+
     if (importResult.isSuccess) {
         val files = importResult.getOrNull() ?: emptyList()
         session {
@@ -369,7 +371,7 @@ fun syncPull(config: FilameConfig) {
             textLine()
         }.run()
     }
-    
+
     if (config.githubRepo.isEmpty()) {
         session {
             section {
@@ -378,10 +380,10 @@ fun syncPull(config: FilameConfig) {
         }
         return
     }
-    
+
     val gitManager = GitManager(config)
     val gitResult = gitManager.initializeRepo()
-    
+
     if (gitResult.isFailure) {
         session {
             section {
@@ -390,13 +392,13 @@ fun syncPull(config: FilameConfig) {
         }
         return
     }
-    
+
     val git = gitResult.getOrNull()!!
-    
+
     println("Pulling latest changes from GitHub...")
-    
+
     val pullResult = gitManager.pull(git)
-    
+
     if (pullResult.isSuccess) {
         session {
             section {
@@ -410,7 +412,7 @@ fun syncPull(config: FilameConfig) {
             }.run()
         }
     }
-    
+
     git.close()
 }
 
@@ -424,7 +426,7 @@ fun syncPush(config: FilameConfig) {
             textLine()
         }.run()
     }
-    
+
     if (config.githubRepo.isEmpty()) {
         session {
             section {
@@ -433,10 +435,10 @@ fun syncPush(config: FilameConfig) {
         }
         return
     }
-    
+
     val gitManager = GitManager(config)
     val gitResult = gitManager.initializeRepo()
-    
+
     if (gitResult.isFailure) {
         session {
             section {
@@ -445,16 +447,16 @@ fun syncPush(config: FilameConfig) {
         }
         return
     }
-    
+
     val git = gitResult.getOrNull()!!
-    
+
     print("Enter commit message: ")
     val message = scanner.nextLine().ifEmpty { "Update configs from ${config.deviceName}" }
-    
+
     println("Committing changes...")
-    
+
     val commitResult = gitManager.commit(git, message)
-    
+
     if (commitResult.isFailure) {
         session {
             section {
@@ -464,17 +466,17 @@ fun syncPush(config: FilameConfig) {
         git.close()
         return
     }
-    
+
     println("Pushing to GitHub...")
-    
+
     session {
         section {
             yellow { textLine("Note: You may need to configure Git credentials for push") }
         }.run()
     }
-    
+
     val pushResult = gitManager.push(git)
-    
+
     if (pushResult.isSuccess) {
         session {
             section {
@@ -489,7 +491,7 @@ fun syncPush(config: FilameConfig) {
             }.run()
         }
     }
-    
+
     git.close()
 }
 
@@ -499,13 +501,13 @@ fun syncPush(config: FilameConfig) {
 fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
     var currentConfig = config
     var managing = true
-    
+
     while (managing) {
         session {
             section {
                 cyan { textLine("═══ Manage Ignore Patterns ═══") }
                 textLine()
-                
+
                 if (currentConfig.ignorePatterns.isEmpty()) {
                     yellow { textLine("No ignore patterns configured.") }
                 } else {
@@ -515,7 +517,7 @@ fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
                         textLine(pattern)
                     }
                 }
-                
+
                 textLine()
                 green { textLine("1. Add pattern") }
                 green { textLine("2. Remove pattern") }
@@ -524,15 +526,16 @@ fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
                 text("Select an option: ")
             }.run()
         }
-        
+
         when (scanner.nextLine()) {
             "1" -> {
                 print("Enter ignore pattern (e.g., *.log): ")
                 val pattern = scanner.nextLine()
                 if (pattern.isNotEmpty()) {
-                    currentConfig = currentConfig.copy(
-                        ignorePatterns = currentConfig.ignorePatterns + pattern
-                    )
+                    currentConfig =
+                        currentConfig.copy(
+                            ignorePatterns = currentConfig.ignorePatterns + pattern,
+                        )
                     saveConfig(currentConfig)
                     session {
                         section {
@@ -546,9 +549,10 @@ fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
                     print("Enter pattern number to remove: ")
                     val index = scanner.nextLine().toIntOrNull()?.minus(1)
                     if (index != null && index in currentConfig.ignorePatterns.indices) {
-                        currentConfig = currentConfig.copy(
-                            ignorePatterns = currentConfig.ignorePatterns.filterIndexed { i, _ -> i != index }
-                        )
+                        currentConfig =
+                            currentConfig.copy(
+                                ignorePatterns = currentConfig.ignorePatterns.filterIndexed { i, _ -> i != index },
+                            )
                         saveConfig(currentConfig)
                         session {
                             section {
@@ -560,12 +564,12 @@ fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
             }
             "3" -> managing = false
         }
-        
+
         if (managing) {
             println("\nPress Enter to continue...")
             scanner.nextLine()
         }
     }
-    
+
     return currentConfig
 }
