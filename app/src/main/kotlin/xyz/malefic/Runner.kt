@@ -1,15 +1,25 @@
 package xyz.malefic
 
 import com.charleskorn.kaml.Yaml
-import com.varabyte.kotter.foundation.*
-import com.varabyte.kotter.foundation.text.*
+import com.varabyte.kotter.foundation.input.Keys
+import com.varabyte.kotter.foundation.input.onKeyPressed
+import com.varabyte.kotter.foundation.input.runUntilKeyPressed
+import com.varabyte.kotter.foundation.liveVarOf
+import com.varabyte.kotter.foundation.session
+import com.varabyte.kotter.foundation.text.cyan
+import com.varabyte.kotter.foundation.text.green
+import com.varabyte.kotter.foundation.text.red
+import com.varabyte.kotter.foundation.text.text
+import com.varabyte.kotter.foundation.text.textLine
+import com.varabyte.kotter.foundation.text.white
+import com.varabyte.kotter.foundation.text.yellow
 import java.util.Scanner
 
 /**
  * Filame - File manager for Arch Linux configurations
  * Manages configuration files across multiple devices with GitHub integration
  */
-fun main(args: Array<String>) {
+fun main(vararg args: String) {
     if (args.isNotEmpty() && args[0] == "hello") {
         println("Hello World!")
         return
@@ -64,12 +74,13 @@ fun showMainMenu(initialConfig: FilameConfig) {
 
     while (running) {
         session {
+            var choice by liveVarOf(9)
             section {
                 cyan { textLine("╔════════════════════════════════════════╗") }
                 cyan {
                     text("║  ")
                     white { text("FILAME - Arch Config Manager") }
-                    cyan { textLine("      ║") }
+                    cyan { textLine("          ║") }
                 }
                 cyan { textLine("╚════════════════════════════════════════╝") }
                 textLine()
@@ -84,45 +95,82 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 textLine("Config files: ${config.configFiles.size}")
                 textLine()
 
-                green { textLine("1. Configure settings") }
-                green { textLine("2. Add configuration file") }
-                green { textLine("3. List configuration files") }
-                green { textLine("4. Export configs to repo") }
-                green { textLine("5. Import configs from repo") }
-                green { textLine("6. Sync with GitHub (pull)") }
-                green { textLine("7. Sync with GitHub (push)") }
-                green { textLine("8. Manage ignore patterns") }
-                cyan { textLine("9. Exit") }
+                arrayListOf(
+                    "1. Configure settings",
+                    "2. Add configuration file",
+                    "3. List configuration files",
+                    "4. Export configs to repo",
+                    "5. Import configs from repo",
+                    "6. Sync with GitHub (pull)",
+                    "7. Sync with GitHub (push)",
+                    "8. Manage ignore patterns",
+                    "9. Exit",
+                ).forEachIndexed { i, line ->
+                    if (choice == i + 1) {
+                        cyan { textLine(line) }
+                    } else {
+                        green { textLine(line) }
+                    }
+                }
                 textLine()
 
                 text("Select an option: ")
-            }.run()
-        }
+            }.runUntilKeyPressed(
+                Keys.DIGIT_1,
+                Keys.DIGIT_2,
+                Keys.DIGIT_3,
+                Keys.DIGIT_4,
+                Keys.DIGIT_5,
+                Keys.DIGIT_6,
+                Keys.DIGIT_7,
+                Keys.DIGIT_8,
+                Keys.DIGIT_9,
+            ) {
+                onKeyPressed {
+                    when (key) {
+                        Keys.DIGIT_1 -> choice = 1
+                        Keys.DIGIT_2 -> choice = 2
+                        Keys.DIGIT_3 -> choice = 3
+                        Keys.DIGIT_4 -> choice = 4
+                        Keys.DIGIT_5 -> choice = 5
+                        Keys.DIGIT_6 -> choice = 6
+                        Keys.DIGIT_7 -> choice = 7
+                        Keys.DIGIT_8 -> choice = 8
+                        Keys.DIGIT_9 -> choice = 9
 
-        val choice = scanner.nextLine()
+                        Keys.LEFT -> choice = if (choice == 1) 9 else choice - 1
+                        Keys.DOWN -> choice = if (choice == 1) 9 else choice - 1
+                        Keys.RIGHT -> choice = if (choice == 9) 1 else choice + 1
+                        Keys.UP -> choice = if (choice == 9) 1 else choice + 1
 
-        when (choice) {
-            "1" -> config = configureSettings(config)
-            "2" -> config = addConfigFile(config)
-            "3" -> listConfigFiles(config)
-            "4" -> exportConfigs(config)
-            "5" -> importConfigs(config)
-            "6" -> syncPull(config)
-            "7" -> syncPush(config)
-            "8" -> config = manageIgnorePatterns(config)
-            "9" -> {
-                session {
-                    section {
-                        green { textLine("Thanks for using Filame! Goodbye!") }
-                    }.run()
-                }
-                running = false
-            }
-            else -> {
-                session {
-                    section {
-                        red { textLine("Invalid option. Please try again.") }
-                    }.run()
+                        Keys.ENTER -> {
+                            when (choice) {
+                                1 -> config = configureSettings(config)
+                                2 -> config = addConfigFile(config)
+                                3 -> listConfigFiles(config)
+                                4 -> exportConfigs(config)
+                                5 -> importConfigs(config)
+                                6 -> syncPull(config)
+                                7 -> syncPush(config)
+                                8 -> config = manageIgnorePatterns(config)
+                                9 -> {
+                                    session {
+                                        section {
+                                            green { textLine("Thanks for using Filame! Goodbye!") }
+                                        }.run()
+                                    }
+                                    running = false
+                                }
+                                else -> {
+                                    section {
+                                        red { textLine("Invalid option. Please try again.") }
+                                    }.run()
+                                }
+                            }
+                        }
+                    }
+                    rerender()
+                    println("Choice is $choice")
                 }
             }
         }
