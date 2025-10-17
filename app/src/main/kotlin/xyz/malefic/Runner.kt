@@ -92,20 +92,19 @@ fun showMainMenu(initialConfig: FilameConfig) {
 
                 textLine("Current device: ${config.deviceName.ifEmpty { "Not set" }}")
                 textLine("GitHub repo: ${config.githubRepo.ifEmpty { "Not set" }}")
-                textLine("Config files: ${config.configFiles.size}")
-                textLine("Packages: ${config.packages.size}")
+                textLine("Package bundles: ${config.packageBundles.size}")
                 textLine()
 
                 arrayListOf(
                     "1. Configure settings",
-                    "2. Add configuration file",
-                    "3. List configuration files",
-                    "4. Export configs to repo",
-                    "5. Import configs from repo",
-                    "6. Sync with GitHub (pull)",
-                    "7. Sync with GitHub (push)",
-                    "8. Manage ignore patterns",
-                    "9. Manage packages",
+                    "2. Scan repo for packages",
+                    "3. List package bundles",
+                    "4. Add/Edit package bundle",
+                    "5. Install package & apply config",
+                    "6. Install all missing packages",
+                    "7. Update all packages",
+                    "8. Export package configs to repo",
+                    "9. Sync with GitHub",
                     "0. Exit",
                 ).forEachIndexed { i, line ->
                     val index = if (i == 9) 0 else i + 1
@@ -151,14 +150,14 @@ fun showMainMenu(initialConfig: FilameConfig) {
                         Keys.ENTER -> {
                             when (choice) {
                                 1 -> config = configureSettings(config)
-                                2 -> config = addConfigFile(config)
-                                3 -> listConfigFiles(config)
-                                4 -> exportConfigs(config)
-                                5 -> importConfigs(config)
-                                6 -> syncPull(config)
-                                7 -> syncPush(config)
-                                8 -> config = manageIgnorePatterns(config)
-                                9 -> config = managePackages(config)
+                                2 -> config = scanRepoForPackages(config)
+                                3 -> listPackageBundles(config)
+                                4 -> config = addOrEditPackageBundle(config)
+                                5 -> installPackageWithConfig(config)
+                                6 -> installAllMissingPackages(config)
+                                7 -> updateAllPackages(config)
+                                8 -> exportPackageConfigs(config)
+                                9 -> config = syncWithGitHub(config)
                                 0 -> {
                                     session {
                                         section {
@@ -223,78 +222,114 @@ fun configureSettings(config: FilameConfig): FilameConfig {
 }
 
 /**
- * Add a new configuration file to track
+ * Scan repository for package bundles
  */
-fun addConfigFile(config: FilameConfig): FilameConfig {
+fun scanRepoForPackages(config: FilameConfig): FilameConfig {
     session {
         section {
-            cyan { textLine("═══ Add Configuration File ═══") }
+            cyan { textLine("═══ Scan Repository for Packages ═══") }
             textLine()
         }.run()
     }
 
-    print("Enter source path (e.g., ~/.config/i3/config): ")
-    val sourcePath = scanner.nextLine()
-
-    if (sourcePath.isEmpty()) {
+    if (config.githubRepo.isEmpty()) {
         session {
             section {
-                red { textLine("Source path cannot be empty.") }
+                red { textLine("GitHub repository not configured. Please configure first.") }
             }.run()
         }
         return config
     }
 
-    print("Enter destination path in repo (e.g., i3/config): ")
-    val destPath = scanner.nextLine()
+    val gitManager = GitManager(config)
+    val gitResult = gitManager.initializeRepo()
 
-    if (destPath.isEmpty()) {
+    if (gitResult.isFailure) {
         session {
             section {
-                red { textLine("Destination path cannot be empty.") }
+                red { textLine("Error initializing repository: ${gitResult.exceptionOrNull()?.message}") }
             }.run()
         }
         return config
     }
 
-    print("Enter description (optional): ")
-    val description = scanner.nextLine()
+    println("Scanning repository for package bundles...")
 
-    val expandedPath = sourcePath.replace("~", System.getProperty("user.home"))
-    val configFile = ConfigFile(expandedPath, destPath, description)
-    val newConfig = config.copy(configFiles = config.configFiles + configFile)
+    val packageManager = PackageManager(config)
+    val scanResult = packageManager.scanRepoForPackages()
 
-    saveConfig(newConfig)
-
-    session {
-        section {
-            green { textLine("✓ Configuration file added successfully!") }
-        }.run()
+    if (scanResult.isSuccess) {
+        val bundles = scanResult.getOrNull() ?: emptyList()
+        val newConfig = config.copy(packageBundles = bundles)
+        saveConfig(newConfig)
+        
+        session {
+            section {
+                green { textLine("✓ Found ${bundles.size} package bundle(s)") }
+                bundles.forEach { bundle ->
+                    text("  • ")
+                    cyan { text(bundle.name) }
+                    text(" (${bundle.source})")
+                    if (bundle.configFiles.isNotEmpty()) {
+                        text(" - ${bundle.configFiles.size} config file(s)")
+                    }
+                    textLine()
+                }
+            }.run()
+        }
+        return newConfig
+    } else {
+        session {
+            section {
+                red { textLine("Error scanning repository: ${scanResult.exceptionOrNull()?.message}") }
+            }.run()
+        }
+        return config
     }
-
-    return newConfig
 }
 
 /**
- * List all tracked configuration files
+ * List all package bundles
  */
-fun listConfigFiles(config: FilameConfig) {
+fun listPackageBundles(config: FilameConfig) {
+    val packageManager = PackageManager(config)
+    val statuses = packageManager.getPackageStatuses()
+    
     session {
         section {
-            cyan { textLine("═══ Configuration Files ═══") }
+            cyan { textLine("═══ Package Bundles ═══") }
             textLine()
 
-            if (config.configFiles.isEmpty()) {
-                yellow { textLine("No configuration files tracked yet.") }
+            if (config.packageBundles.isEmpty()) {
+                yellow { textLine("No package bundles tracked yet.") }
+                textLine()
+                yellow { textLine("Tip: Use 'Scan repo for packages' to discover packages from your GitHub repo") }
             } else {
-                config.configFiles.forEachIndexed { index, file ->
+                config.packageBundles.forEachIndexed { index, bundle ->
                     white { text("${index + 1}. ") }
-                    green { text(file.sourcePath) }
-                    text(" → ")
-                    cyan { textLine(file.destinationPath) }
-                    if (file.description.isNotEmpty()) {
+                    
+                    if (statuses[bundle] == true) {
+                        green { text("[✓] ") }
+                    } else {
+                        red { text("[✗] ") }
+                    }
+                    
+                    cyan { text(bundle.name) }
+                    text(" (${bundle.source})")
+                    textLine()
+                    
+                    if (bundle.description.isNotEmpty()) {
                         text("   ")
-                        textLine(file.description)
+                        textLine(bundle.description)
+                    }
+                    
+                    if (bundle.configFiles.isNotEmpty()) {
+                        text("   Config files: ")
+                        textLine("${bundle.configFiles.size}")
+                        bundle.configFiles.forEach { file ->
+                            text("     • ")
+                            textLine(file.destinationPath)
+                        }
                     }
                     textLine()
                 }
@@ -304,68 +339,299 @@ fun listConfigFiles(config: FilameConfig) {
 }
 
 /**
- * Export configuration files to repository
+ * Add or edit a package bundle
  */
-fun exportConfigs(config: FilameConfig) {
+fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
     session {
         section {
-            cyan { textLine("═══ Export Configurations ═══") }
+            cyan { textLine("═══ Add/Edit Package Bundle ═══") }
             textLine()
         }.run()
     }
 
-    if (config.githubRepo.isEmpty()) {
+    print("Enter package name: ")
+    val name = scanner.nextLine()
+
+    if (name.isEmpty()) {
         session {
             section {
-                red { textLine("GitHub repository not configured. Please configure first.") }
+                red { textLine("Package name cannot be empty.") }
             }.run()
         }
-        return
+        return config
     }
 
-    val gitManager = GitManager(config)
-    val gitResult = gitManager.initializeRepo()
+    print("Enter source (official/aur) [official]: ")
+    val source = scanner.nextLine().ifEmpty { "official" }
 
-    if (gitResult.isFailure) {
-        session {
-            section {
-                red { textLine("Error initializing repository: ${gitResult.exceptionOrNull()?.message}") }
-            }.run()
-        }
-        return
-    }
+    print("Enter description (optional): ")
+    val description = scanner.nextLine()
 
-    println("Exporting configuration files...")
+    // Ask if user wants to add config files
+    print("Add configuration files? (y/n) [n]: ")
+    val addConfigs = scanner.nextLine().lowercase() == "y"
 
-    val exportResult = gitManager.exportConfigs()
-
-    if (exportResult.isSuccess) {
-        val files = exportResult.getOrNull() ?: emptyList()
-        session {
-            section {
-                green { textLine("✓ Exported ${files.size} configuration file(s)") }
-                files.forEach { file ->
-                    text("  • ")
-                    textLine(file)
+    val configFiles = mutableListOf<ConfigFile>()
+    if (addConfigs) {
+        var adding = true
+        while (adding) {
+            print("Enter source path (or press Enter to finish): ")
+            val sourcePath = scanner.nextLine()
+            if (sourcePath.isEmpty()) {
+                adding = false
+            } else {
+                print("Enter destination path in repo: ")
+                val destPath = scanner.nextLine()
+                if (destPath.isNotEmpty()) {
+                    print("Enter description (optional): ")
+                    val fileDesc = scanner.nextLine()
+                    val expandedPath = sourcePath.replace("~", System.getProperty("user.home"))
+                    configFiles.add(ConfigFile(expandedPath, destPath, fileDesc))
                 }
+            }
+        }
+    }
+
+    val bundle = PackageBundle(name, source, description, configFiles)
+    
+    // Check if bundle already exists and replace it
+    val existingIndex = config.packageBundles.indexOfFirst { it.name == name }
+    val newBundles = if (existingIndex >= 0) {
+        config.packageBundles.toMutableList().apply { set(existingIndex, bundle) }
+    } else {
+        config.packageBundles + bundle
+    }
+
+    val newConfig = config.copy(packageBundles = newBundles)
+    saveConfig(newConfig)
+
+    session {
+        section {
+            green { textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!") }
+        }.run()
+    }
+
+    return newConfig
+}
+
+/**
+ * Install a package and apply its configuration
+ */
+fun installPackageWithConfig(config: FilameConfig) {
+    session {
+        section {
+            cyan { textLine("═══ Install Package & Apply Config ═══") }
+            textLine()
+        }.run()
+    }
+
+    if (config.packageBundles.isEmpty()) {
+        session {
+            section {
+                yellow { textLine("No package bundles tracked yet.") }
             }.run()
+        }
+        return
+    }
+
+    // Show available packages
+    config.packageBundles.forEachIndexed { index, bundle ->
+        println("${index + 1}. ${bundle.name} (${bundle.source})")
+    }
+
+    print("\nEnter package number to install: ")
+    val index = scanner.nextLine().toIntOrNull()?.minus(1)
+
+    if (index == null || index !in config.packageBundles.indices) {
+        session {
+            section {
+                red { textLine("Invalid package number.") }
+            }.run()
+        }
+        return
+    }
+
+    val bundle = config.packageBundles[index]
+    val packageManager = PackageManager(config)
+
+    // Check if paru is needed
+    if (bundle.source == "aur" && !packageManager.isParuInstalled()) {
+        session {
+            section {
+                yellow { textLine("Paru is required for AUR packages but not installed.") }
+                text("Install paru now? (y/n): ")
+            }.run()
+        }
+        
+        if (scanner.nextLine().lowercase() == "y") {
+            println("Installing paru...")
+            val paruResult = packageManager.installParu()
+            if (paruResult.isFailure) {
+                session {
+                    section {
+                        red { textLine("Failed to install paru: ${paruResult.exceptionOrNull()?.message}") }
+                    }.run()
+                }
+                return
+            }
+        } else {
+            return
+        }
+    }
+
+    // Install the package
+    println("Installing ${bundle.name}...")
+    val installResult = packageManager.installPackage(bundle)
+
+    if (installResult.isFailure) {
+        session {
+            section {
+                red { textLine("Error installing package: ${installResult.exceptionOrNull()?.message}") }
+            }.run()
+        }
+        return
+    }
+
+    // Apply configuration
+    if (bundle.configFiles.isNotEmpty()) {
+        println("Applying configuration files...")
+        val applyResult = packageManager.applyPackageConfig(bundle)
+
+        if (applyResult.isSuccess) {
+            val files = applyResult.getOrNull() ?: emptyList()
+            session {
+                section {
+                    green { textLine("✓ Package '${bundle.name}' installed and configured successfully!") }
+                    if (files.isNotEmpty()) {
+                        textLine("Applied ${files.size} config file(s):")
+                        files.forEach { file ->
+                            text("  • ")
+                            textLine(file)
+                        }
+                    }
+                }.run()
+            }
+        } else {
+            session {
+                section {
+                    yellow { textLine("⚠ Package installed but configuration failed: ${applyResult.exceptionOrNull()?.message}") }
+                }.run()
+            }
         }
     } else {
         session {
             section {
-                red { textLine("Error exporting configs: ${exportResult.exceptionOrNull()?.message}") }
+                green { textLine("✓ Package '${bundle.name}' installed successfully!") }
             }.run()
         }
     }
 }
 
 /**
- * Import configuration files from repository
+ * Install all missing packages
  */
-fun importConfigs(config: FilameConfig) {
+fun installAllMissingPackages(config: FilameConfig) {
     session {
         section {
-            cyan { textLine("═══ Import Configurations ═══") }
+            cyan { textLine("═══ Install All Missing Packages ═══") }
+            textLine()
+        }.run()
+    }
+
+    val packageManager = PackageManager(config)
+    
+    // Check if paru is needed for any AUR packages
+    val needsParu = config.packageBundles.any { it.source == "aur" }
+    if (needsParu && !packageManager.isParuInstalled()) {
+        session {
+            section {
+                yellow { textLine("Paru is required for AUR packages but not installed.") }
+                text("Install paru now? (y/n): ")
+            }.run()
+        }
+        
+        if (scanner.nextLine().lowercase() == "y") {
+            println("Installing paru...")
+            val paruResult = packageManager.installParu()
+            if (paruResult.isFailure) {
+                session {
+                    section {
+                        red { textLine("Failed to install paru: ${paruResult.exceptionOrNull()?.message}") }
+                    }.run()
+                }
+                return
+            }
+        } else {
+            return
+        }
+    }
+
+    println("Installing missing packages...")
+    val result = packageManager.installMissingPackages()
+
+    if (result.isSuccess) {
+        val installed = result.getOrNull() ?: emptyList()
+        session {
+            section {
+                if (installed.isEmpty()) {
+                    green { textLine("✓ All tracked packages are already installed") }
+                } else {
+                    green { textLine("✓ Installed ${installed.size} package(s):") }
+                    installed.forEach { name ->
+                        text("  • ")
+                        textLine(name)
+                    }
+                }
+            }.run()
+        }
+    } else {
+        session {
+            section {
+                red { textLine("Error installing packages: ${result.exceptionOrNull()?.message}") }
+            }.run()
+        }
+    }
+}
+
+/**
+ * Update all packages
+ */
+fun updateAllPackages(config: FilameConfig) {
+    session {
+        section {
+            cyan { textLine("═══ Update All Packages ═══") }
+            yellow { textLine("This will update all system packages (official + AUR)") }
+            textLine()
+        }.run()
+    }
+
+    val packageManager = PackageManager(config)
+    println("Updating all packages... This may take a while.")
+    
+    val result = packageManager.updatePackages()
+
+    if (result.isSuccess) {
+        session {
+            section {
+                green { textLine("✓ All packages updated successfully!") }
+            }.run()
+        }
+    } else {
+        session {
+            section {
+                red { textLine("Error updating packages: ${result.exceptionOrNull()?.message}") }
+            }.run()
+        }
+    }
+}
+
+/**
+ * Export package configurations to repo
+ */
+fun exportPackageConfigs(config: FilameConfig) {
+    session {
+        section {
+            cyan { textLine("═══ Export Package Configurations ═══") }
             textLine()
         }.run()
     }
@@ -391,34 +657,64 @@ fun importConfigs(config: FilameConfig) {
         return
     }
 
-    println("Importing configuration files...")
+    println("Exporting package configurations...")
 
-    val importResult = gitManager.importConfigs()
+    val packageManager = PackageManager(config)
+    var totalExported = 0
 
-    if (importResult.isSuccess) {
-        val files = importResult.getOrNull() ?: emptyList()
-        session {
-            section {
-                green { textLine("✓ Imported ${files.size} configuration file(s)") }
-                files.forEach { file ->
-                    text("  • ")
-                    textLine(file)
-                }
-            }.run()
-        }
-    } else {
-        session {
-            section {
-                red { textLine("Error importing configs: ${importResult.exceptionOrNull()?.message}") }
-            }.run()
+    for (bundle in config.packageBundles) {
+        val exportResult = packageManager.exportPackageConfig(bundle)
+        if (exportResult.isSuccess) {
+            totalExported += exportResult.getOrNull()?.size ?: 0
         }
     }
+
+    session {
+        section {
+            green { textLine("✓ Exported $totalExported configuration file(s)") }
+        }.run()
+    }
+}
+
+/**
+ * Sync with GitHub (pull and push)
+ */
+fun syncWithGitHub(config: FilameConfig): FilameConfig {
+    var currentConfig = config
+    var syncing = true
+
+    while (syncing) {
+        session {
+            section {
+                cyan { textLine("═══ Sync with GitHub ═══") }
+                textLine()
+                green { textLine("1. Pull changes from GitHub") }
+                green { textLine("2. Push changes to GitHub") }
+                cyan { textLine("3. Back to main menu") }
+                textLine()
+                text("Select an option: ")
+            }.run()
+        }
+
+        when (scanner.nextLine()) {
+            "1" -> currentConfig = syncPull(currentConfig)
+            "2" -> syncPush(currentConfig)
+            "3" -> syncing = false
+        }
+
+        if (syncing) {
+            println("\nPress Enter to continue...")
+            scanner.nextLine()
+        }
+    }
+
+    return currentConfig
 }
 
 /**
  * Pull changes from GitHub
  */
-fun syncPull(config: FilameConfig) {
+fun syncPull(config: FilameConfig): FilameConfig {
     session {
         section {
             cyan { textLine("═══ Sync from GitHub (Pull) ═══") }
@@ -432,7 +728,7 @@ fun syncPull(config: FilameConfig) {
                 red { textLine("GitHub repository not configured. Please configure first.") }
             }.run()
         }
-        return
+        return config
     }
 
     val gitManager = GitManager(config)
@@ -444,7 +740,7 @@ fun syncPull(config: FilameConfig) {
                 red { textLine("Error initializing repository: ${gitResult.exceptionOrNull()?.message}") }
             }.run()
         }
-        return
+        return config
     }
 
     val git = gitResult.getOrNull()!!
@@ -457,6 +753,7 @@ fun syncPull(config: FilameConfig) {
         session {
             section {
                 green { textLine("✓ Successfully pulled changes from GitHub") }
+                yellow { textLine("Tip: Use 'Scan repo for packages' to update your package list") }
             }.run()
         }
     } else {
@@ -468,6 +765,7 @@ fun syncPull(config: FilameConfig) {
     }
 
     git.close()
+    return config
 }
 
 /**
@@ -549,344 +847,4 @@ fun syncPush(config: FilameConfig) {
     git.close()
 }
 
-/**
- * Manage ignore patterns
- */
-fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
-    var currentConfig = config
-    var managing = true
 
-    while (managing) {
-        session {
-            section {
-                cyan { textLine("═══ Manage Ignore Patterns ═══") }
-                textLine()
-
-                if (currentConfig.ignorePatterns.isEmpty()) {
-                    yellow { textLine("No ignore patterns configured.") }
-                } else {
-                    textLine("Current ignore patterns:")
-                    currentConfig.ignorePatterns.forEachIndexed { index, pattern ->
-                        white { text("${index + 1}. ") }
-                        textLine(pattern)
-                    }
-                }
-
-                textLine()
-                green { textLine("1. Add pattern") }
-                green { textLine("2. Remove pattern") }
-                cyan { textLine("3. Back to main menu") }
-                textLine()
-                text("Select an option: ")
-            }.run()
-        }
-
-        when (scanner.nextLine()) {
-            "1" -> {
-                print("Enter ignore pattern (e.g., *.log): ")
-                val pattern = scanner.nextLine()
-                if (pattern.isNotEmpty()) {
-                    currentConfig =
-                        currentConfig.copy(
-                            ignorePatterns = currentConfig.ignorePatterns + pattern,
-                        )
-                    saveConfig(currentConfig)
-                    session {
-                        section {
-                            green { textLine("✓ Pattern added") }
-                        }.run()
-                    }
-                }
-            }
-            "2" -> {
-                if (currentConfig.ignorePatterns.isNotEmpty()) {
-                    print("Enter pattern number to remove: ")
-                    val index = scanner.nextLine().toIntOrNull()?.minus(1)
-                    if (index != null && index in currentConfig.ignorePatterns.indices) {
-                        currentConfig =
-                            currentConfig.copy(
-                                ignorePatterns = currentConfig.ignorePatterns.filterIndexed { i, _ -> i != index },
-                            )
-                        saveConfig(currentConfig)
-                        session {
-                            section {
-                                green { textLine("✓ Pattern removed") }
-                            }.run()
-                        }
-                    }
-                }
-            }
-            "3" -> managing = false
-        }
-
-        if (managing) {
-            println("\nPress Enter to continue...")
-            scanner.nextLine()
-        }
-    }
-
-    return currentConfig
-}
-
-/**
- * Manage packages
- */
-fun managePackages(config: FilameConfig): FilameConfig {
-    var currentConfig = config
-    var managing = true
-    val packageManager = PackageManager(currentConfig)
-
-    while (managing) {
-        session {
-            section {
-                cyan { textLine("═══ Manage Packages ═══") }
-                textLine()
-
-                // Show paru status
-                if (packageManager.isParuInstalled()) {
-                    green { textLine("✓ Paru is installed") }
-                } else {
-                    yellow { textLine("⚠ Paru is not installed (required for AUR packages)") }
-                }
-                textLine()
-
-                // Show tracked packages
-                if (currentConfig.packages.isEmpty()) {
-                    yellow { textLine("No packages tracked yet.") }
-                } else {
-                    textLine("Tracked packages:")
-                    val statuses = packageManager.getPackageStatuses()
-                    currentConfig.packages.forEachIndexed { index, pkg ->
-                        white { text("${index + 1}. ") }
-                        if (statuses[pkg] == true) {
-                            green { text("[✓] ") }
-                        } else {
-                            red { text("[✗] ") }
-                        }
-                        cyan { text(pkg.name) }
-                        text(" (${pkg.source})")
-                        if (pkg.description.isNotEmpty()) {
-                            text(" - ${pkg.description}")
-                        }
-                        textLine()
-                    }
-                }
-
-                textLine()
-                green { textLine("1. Install paru (if not installed)") }
-                green { textLine("2. Add package") }
-                green { textLine("3. Search packages") }
-                green { textLine("4. Install missing packages") }
-                green { textLine("5. Update all packages") }
-                green { textLine("6. Remove package from tracking") }
-                green { textLine("7. Uninstall package from system") }
-                cyan { textLine("8. Back to main menu") }
-                textLine()
-                text("Select an option: ")
-            }.run()
-        }
-
-        when (scanner.nextLine()) {
-            "1" -> {
-                if (packageManager.isParuInstalled()) {
-                    session {
-                        section {
-                            green { textLine("✓ Paru is already installed") }
-                        }.run()
-                    }
-                } else {
-                    session {
-                        section {
-                            yellow { textLine("Installing paru... This may take a few minutes.") }
-                        }.run()
-                    }
-                    val result = packageManager.installParu()
-                    if (result.isSuccess) {
-                        session {
-                            section {
-                                green { textLine("✓ Paru installed successfully!") }
-                            }.run()
-                        }
-                    } else {
-                        session {
-                            section {
-                                red { textLine("Error installing paru: ${result.exceptionOrNull()?.message}") }
-                            }.run()
-                        }
-                    }
-                }
-            }
-            "2" -> {
-                print("Enter package name: ")
-                val name = scanner.nextLine()
-                if (name.isEmpty()) {
-                    session {
-                        section {
-                            red { textLine("Package name cannot be empty.") }
-                        }.run()
-                    }
-                } else {
-                    print("Enter source (official/aur) [official]: ")
-                    val source = scanner.nextLine().ifEmpty { "official" }
-                    print("Enter description (optional): ")
-                    val description = scanner.nextLine()
-                    
-                    val pkg = Package(name, source, description)
-                    currentConfig = currentConfig.copy(packages = currentConfig.packages + pkg)
-                    saveConfig(currentConfig)
-                    session {
-                        section {
-                            green { textLine("✓ Package added to tracking") }
-                        }.run()
-                    }
-                }
-            }
-            "3" -> {
-                print("Enter search query: ")
-                val query = scanner.nextLine()
-                if (query.isNotEmpty()) {
-                    session {
-                        section {
-                            yellow { textLine("Searching for '$query'...") }
-                        }.run()
-                    }
-                    val result = packageManager.searchPackages(query)
-                    if (result.isSuccess) {
-                        val results = result.getOrNull() ?: emptyList()
-                        session {
-                            section {
-                                if (results.isEmpty()) {
-                                    yellow { textLine("No packages found.") }
-                                } else {
-                                    cyan { textLine("Search results:") }
-                                    textLine()
-                                    results.take(20).forEach { pkg ->
-                                        white { text("• ") }
-                                        cyan { text(pkg.name) }
-                                        text(" (${pkg.source})")
-                                        if (pkg.description.isNotEmpty()) {
-                                            textLine()
-                                            text("  ${pkg.description}")
-                                        }
-                                        textLine()
-                                    }
-                                    if (results.size > 20) {
-                                        yellow { textLine("\n... and ${results.size - 20} more results") }
-                                    }
-                                }
-                            }.run()
-                        }
-                    } else {
-                        session {
-                            section {
-                                red { textLine("Error searching packages: ${result.exceptionOrNull()?.message}") }
-                            }.run()
-                        }
-                    }
-                }
-            }
-            "4" -> {
-                session {
-                    section {
-                        yellow { textLine("Installing missing packages...") }
-                    }.run()
-                }
-                val result = packageManager.installMissingPackages()
-                if (result.isSuccess) {
-                    val installed = result.getOrNull() ?: emptyList()
-                    session {
-                        section {
-                            if (installed.isEmpty()) {
-                                green { textLine("✓ All tracked packages are already installed") }
-                            } else {
-                                green { textLine("✓ Installed ${installed.size} package(s):") }
-                                installed.forEach { name ->
-                                    text("  • ")
-                                    textLine(name)
-                                }
-                            }
-                        }.run()
-                    }
-                } else {
-                    session {
-                        section {
-                            red { textLine("Error installing packages: ${result.exceptionOrNull()?.message}") }
-                        }.run()
-                    }
-                }
-            }
-            "5" -> {
-                session {
-                    section {
-                        yellow { textLine("Updating all packages... This may take a while.") }
-                    }.run()
-                }
-                val result = packageManager.updatePackages()
-                if (result.isSuccess) {
-                    session {
-                        section {
-                            green { textLine("✓ All packages updated successfully!") }
-                        }.run()
-                    }
-                } else {
-                    session {
-                        section {
-                            red { textLine("Error updating packages: ${result.exceptionOrNull()?.message}") }
-                        }.run()
-                    }
-                }
-            }
-            "6" -> {
-                if (currentConfig.packages.isNotEmpty()) {
-                    print("Enter package number to remove from tracking: ")
-                    val index = scanner.nextLine().toIntOrNull()?.minus(1)
-                    if (index != null && index in currentConfig.packages.indices) {
-                        val pkg = currentConfig.packages[index]
-                        currentConfig = currentConfig.copy(
-                            packages = currentConfig.packages.filterIndexed { i, _ -> i != index }
-                        )
-                        saveConfig(currentConfig)
-                        session {
-                            section {
-                                green { textLine("✓ Package '${pkg.name}' removed from tracking") }
-                            }.run()
-                        }
-                    }
-                }
-            }
-            "7" -> {
-                print("Enter package name to uninstall: ")
-                val packageName = scanner.nextLine()
-                if (packageName.isNotEmpty()) {
-                    session {
-                        section {
-                            yellow { textLine("Uninstalling $packageName...") }
-                        }.run()
-                    }
-                    val result = packageManager.removePackage(packageName)
-                    if (result.isSuccess) {
-                        session {
-                            section {
-                                green { textLine("✓ Package '$packageName' uninstalled successfully!") }
-                            }.run()
-                        }
-                    } else {
-                        session {
-                            section {
-                                red { textLine("Error uninstalling package: ${result.exceptionOrNull()?.message}") }
-                            }.run()
-                        }
-                    }
-                }
-            }
-            "8" -> managing = false
-        }
-
-        if (managing) {
-            println("\nPress Enter to continue...")
-            scanner.nextLine()
-        }
-    }
-
-    return currentConfig
-}

@@ -13,12 +13,19 @@ class ConfigTest {
             FilameConfig(
                 deviceName = "arch-laptop",
                 githubRepo = "https://github.com/user/configs.git",
-                configFiles =
+                packageBundles =
                     listOf(
-                        ConfigFile(
-                            sourcePath = "/home/user/.config/i3/config",
-                            destinationPath = "i3/config",
-                            description = "i3 window manager config",
+                        PackageBundle(
+                            name = "i3",
+                            source = "official",
+                            description = "i3 window manager",
+                            configFiles = listOf(
+                                ConfigFile(
+                                    sourcePath = "/home/user/.config/i3/config",
+                                    destinationPath = "i3/config",
+                                    description = "i3 window manager config",
+                                ),
+                            )
                         ),
                     ),
                 ignorePatterns = listOf("*.log", "*.tmp"),
@@ -27,7 +34,7 @@ class ConfigTest {
         val yaml = Yaml.default.encodeToString(FilameConfig.serializer(), config)
         assertNotNull(yaml)
         assertTrue(yaml.contains("arch-laptop"))
-        assertTrue(yaml.contains("i3/config"))
+        assertTrue(yaml.contains("i3"))
     }
 
     @Test
@@ -36,10 +43,14 @@ class ConfigTest {
             """
             deviceName: arch-desktop
             githubRepo: https://github.com/user/dotfiles.git
-            configFiles:
-              - sourcePath: /home/user/.bashrc
-                destinationPath: bashrc
-                description: Bash configuration
+            packageBundles:
+              - name: bash
+                source: official
+                description: Shell
+                configFiles:
+                  - sourcePath: /home/user/.bashrc
+                    destinationPath: bashrc
+                    description: Bash configuration
             ignorePatterns:
               - "*.log"
               - "*.cache"
@@ -48,8 +59,10 @@ class ConfigTest {
         val config = Yaml.default.decodeFromString(FilameConfig.serializer(), yaml)
         assertEquals("arch-desktop", config.deviceName)
         assertEquals("https://github.com/user/dotfiles.git", config.githubRepo)
-        assertEquals(1, config.configFiles.size)
-        assertEquals("/home/user/.bashrc", config.configFiles[0].sourcePath)
+        assertEquals(1, config.packageBundles.size)
+        assertEquals("bash", config.packageBundles[0].name)
+        assertEquals(1, config.packageBundles[0].configFiles.size)
+        assertEquals("/home/user/.bashrc", config.packageBundles[0].configFiles[0].sourcePath)
         assertEquals(2, config.ignorePatterns.size)
     }
 

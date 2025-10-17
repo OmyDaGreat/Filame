@@ -4,14 +4,13 @@ import kotlinx.serialization.Serializable
 import java.io.File
 
 /**
- * Configuration for Filame - manages Arch Linux configuration files across devices
+ * Configuration for Filame - manages Arch Linux packages and their configurations
  */
 @Serializable
 data class FilameConfig(
     val deviceName: String = "",
     val githubRepo: String = "",
-    val configFiles: List<ConfigFile> = emptyList(),
-    val packages: List<Package> = emptyList(),
+    val packageBundles: List<PackageBundle> = emptyList(),
     val ignorePatterns: List<String> =
         listOf(
             "*.log",
@@ -32,13 +31,15 @@ data class ConfigFile(
 )
 
 /**
- * Represents a package to be tracked and managed
+ * Represents a package bundle with its configuration files
+ * This is the primary entity in Filame - packages with their associated configs
  */
 @Serializable
-data class Package(
+data class PackageBundle(
     val name: String,
     val source: String = "official", // "official" or "aur"
     val description: String = "",
+    val configFiles: List<ConfigFile> = emptyList(),
 )
 
 /**

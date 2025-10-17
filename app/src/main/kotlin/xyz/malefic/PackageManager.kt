@@ -9,6 +9,7 @@ import java.io.InputStreamReader
  */
 class PackageManager(
     private val config: FilameConfig,
+    private val repoDir: File = File(System.getProperty("user.home"), ".config/filame/repo"),
 ) {
     /**
      * Check if paru is installed
@@ -167,8 +168,8 @@ class PackageManager(
     /**
      * Get installation status of all tracked packages
      */
-    fun getPackageStatuses(): Map<Package, Boolean> {
-        return config.packages.associateWith { pkg ->
+    fun getPackageStatuses(): Map<PackageBundle, Boolean> {
+        return config.packageBundles.associateWith { pkg ->
             isPackageInstalled(pkg.name)
         }
     }
@@ -176,7 +177,7 @@ class PackageManager(
     /**
      * Install a package
      */
-    fun installPackage(pkg: Package): Result<Unit> {
+    fun installPackage(pkg: PackageBundle): Result<Unit> {
         return try {
             val command = if (pkg.source == "aur") {
                 if (!isParuInstalled()) {
@@ -223,6 +224,123 @@ class PackageManager(
         }
         
         return Result.success(installed)
+    }
+
+    /**
+     * Apply configuration files for a package bundle
+     */
+    fun applyPackageConfig(bundle: PackageBundle): Result<List<String>> {
+        val appliedFiles = mutableListOf<String>()
+        try {
+            for (configFile in bundle.configFiles) {
+                val source = File(repoDir, configFile.destinationPath)
+                if (!source.exists()) {
+                    continue
+                }
+
+                val destination = File(configFile.sourcePath)
+                destination.parentFile?.mkdirs()
+
+                java.nio.file.Files.copy(
+                    source.toPath(),
+                    destination.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                )
+                appliedFiles.add(configFile.sourcePath)
+            }
+            return Result.success(appliedFiles)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
+    /**
+     * Export configuration files for a package bundle to repo
+     */
+    fun exportPackageConfig(bundle: PackageBundle): Result<List<String>> {
+        val exportedFiles = mutableListOf<String>()
+        try {
+            for (configFile in bundle.configFiles) {
+                val source = File(configFile.sourcePath)
+                if (!source.exists()) {
+                    continue
+                }
+
+                val destination = File(repoDir, configFile.destinationPath)
+                destination.parentFile?.mkdirs()
+
+                java.nio.file.Files.copy(
+                    source.toPath(),
+                    destination.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                )
+                exportedFiles.add(configFile.destinationPath)
+            }
+            return Result.success(exportedFiles)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
+    /**
+     * Scan repository directory for package bundles
+     * Looks for directories with package metadata and config files
+     */
+    fun scanRepoForPackages(): Result<List<PackageBundle>> {
+        return try {
+            val bundles = mutableListOf<PackageBundle>()
+            
+            if (!repoDir.exists()) {
+                return Result.success(emptyList())
+            }
+
+            // Look for package directories (each subdirectory is a potential package)
+            repoDir.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { packageDir ->
+                val metadataFile = File(packageDir, "package.yaml")
+                
+                if (metadataFile.exists()) {
+                    // Parse package metadata
+                    try {
+                        val yaml = metadataFile.readText()
+                        val bundle = com.charleskorn.kaml.Yaml.default.decodeFromString(
+                            PackageBundle.serializer(),
+                            yaml
+                        )
+                        bundles.add(bundle)
+                    } catch (e: Exception) {
+                        // Skip packages with invalid metadata
+                    }
+                } else {
+                    // Create a basic package bundle from directory structure
+                    val configFiles = packageDir.walkTopDown()
+                        .filter { it.isFile && !it.name.startsWith(".") }
+                        .map { file ->
+                            val relativePath = file.relativeTo(packageDir).path
+                            ConfigFile(
+                                sourcePath = "/home/${System.getProperty("user.name")}/.config/${packageDir.name}/$relativePath",
+                                destinationPath = "${packageDir.name}/$relativePath",
+                                description = ""
+                            )
+                        }
+                        .toList()
+                    
+                    if (configFiles.isNotEmpty()) {
+                        bundles.add(
+                            PackageBundle(
+                                name = packageDir.name,
+                                source = "official",
+                                description = "",
+                                configFiles = configFiles
+                            )
+                        )
+                    }
+                }
+            }
+            
+            Result.success(bundles)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**
