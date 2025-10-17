@@ -73,81 +73,102 @@ cd Filame
 
 4. Enter your GitHub repository URL (e.g., "https://github.com/username/dotfiles.git")
 
-=== Adding Configuration Files
+=== Setting Up Package Bundles
 
-1. From the main menu, select *2. Add configuration file*
+1. From the main menu, select *4. Add/Edit package bundle*
 
-2. Enter the source path (e.g., `~/.config/i3/config`)
+2. Enter the package name (e.g., `vim`)
 
-3. Enter the destination path in repo (e.g., `i3/config`)
+3. Enter the source: `official` or `aur`
 
-4. Optionally enter a description
+4. Enter an optional description
 
-=== Exporting Configurations
+5. Choose whether to add configuration files (y/n)
 
-1. Select *4. Export configs to repo*
+6. If yes, enter source and destination paths for each config file
 
-2. Your local configuration files will be copied to the repository directory
+=== Discovering Packages from GitHub Repo
+
+1. Create package directories in your GitHub repo (e.g., `vim/`, `i3/`)
+
+2. Place config files in each directory
+
+3. Optionally create a `package.yaml` in each directory with metadata
+
+4. Select *2. Scan repo for packages*
+
+5. Filame will automatically discover and track all packages
+
+=== Installing Packages
+
+*To install a single package with its configuration:*
+- Select *5. Install package & apply config*
+- Choose the package number from the list
+- Filame will install the package and apply its configuration files
+
+*To install all missing packages:*
+- Select *6. Install all missing packages*
+- Filame will install all tracked packages that aren't on the system
 
 === Syncing with GitHub
 
 *To pull latest changes:*
-- Select *6. Sync with GitHub (pull)*
+- Select *9. Sync with GitHub*
+- Choose option 1 to pull
+- Then use option 2 to scan for new packages
 
 *To push your changes:*
-- First, export your configs (option 4)
-- Select *7. Sync with GitHub (push)*
+- First, export package configs (option 8)
+- Select *9. Sync with GitHub*
+- Choose option 2 to push
 - Enter a commit message
-- Changes will be committed and pushed to GitHub
 
-=== Managing Ignore Patterns
+=== Managing Package Bundles
 
-1. Select *8. Manage ignore patterns*
+Filame now uses **Package Bundles** as the primary entity. Each bundle contains:
+- A package (from official repos or AUR)
+- Associated configuration files
+- Package metadata (name, source, description)
 
-2. Add or remove patterns (e.g., `*.log`, `*.tmp`, `.cache/*`)
-
-=== Managing Packages
-
-1. Select *9. Manage packages*
-
-2. Options available:
-   - Install paru (AUR helper) if not already installed
-   - Add packages to track
-   - Search for packages in official repos and AUR
-   - Install missing tracked packages
-   - Update all packages
-   - Remove packages from tracking
-   - Uninstall packages from system
-
-3. Package tracking example:
-   - Add package: `vim` (official)
-   - Add package: `yay` (aur)
-   - Install all missing packages
-   - Update all packages
+1. *Scan repo for packages* (option 2) - Automatically discover packages from your GitHub repo
+2. *List package bundles* (option 3) - View all tracked packages with installation status
+3. *Add/Edit package bundle* (option 4) - Manually create or update a package bundle
+4. *Install package & apply config* (option 5) - Install a specific package and apply its configs
+5. *Install all missing packages* (option 6) - Install all tracked packages that aren't on the system
+6. *Update all packages* (option 7) - Update system packages (official + AUR)
+7. *Export package configs* (option 8) - Export all package configurations to repo
+8. *Sync with GitHub* (option 9) - Pull or push changes
 
 == Configuration File
 
 Filame stores its configuration in `~/.config/filame/config.yaml`
 
-Example configuration:
+Example configuration with package bundles:
 [source,yaml]
 ----
 deviceName: arch-laptop
 githubRepo: https://github.com/username/dotfiles.git
-configFiles:
-  - sourcePath: /home/user/.config/i3/config
-    destinationPath: i3/config
-    description: i3 window manager configuration
-  - sourcePath: /home/user/.bashrc
-    destinationPath: bashrc
-    description: Bash configuration
-packages:
+packageBundles:
   - name: vim
     source: official
     description: Text editor
-  - name: yay
+    configFiles:
+      - sourcePath: /home/user/.vimrc
+        destinationPath: vim/.vimrc
+        description: Vim configuration
+  - name: i3
+    source: official
+    description: Tiling window manager
+    configFiles:
+      - sourcePath: /home/user/.config/i3/config
+        destinationPath: i3/config
+        description: Main i3 config
+      - sourcePath: /home/user/.config/i3/status.conf
+        destinationPath: i3/status.conf
+        description: Status bar config
+  - name: spotify
     source: aur
-    description: AUR helper
+    description: Music streaming client
 ignorePatterns:
   - "*.log"
   - "*.tmp"
