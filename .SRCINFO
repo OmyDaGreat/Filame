@@ -1,0 +1,14 @@
+pkgbase = filame
+	pkgdesc = A powerful terminal tool for managing Arch Linux configurations across multiple devices
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/OmyDaGreat/Filame
+	arch = any
+	license = MIT
+	makedepends = gradle
+	makedepends = git
+	depends = java-runtime>=21
+	source = filame-1.0.0.tar.gz::https://github.com/OmyDaGreat/Filame/archive/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = filame
