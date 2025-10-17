@@ -27,11 +27,11 @@ fun main(vararg args: String) {
 
     ConfigManager.ensureConfigDir()
     var config = loadOrCreateConfig()
-    
+
     // Auto-detect non-Linux systems and enable mock mode
     val osName = System.getProperty("os.name").lowercase()
     val isLinux = osName.contains("linux")
-    
+
     if (!isLinux && !config.mockMode) {
         println("Non-Linux system detected. Enabling mock mode for package operations.")
         config = config.copy(mockMode = true)
@@ -155,10 +155,24 @@ fun showMainMenu(initialConfig: FilameConfig) {
                         Keys.DIGIT_9 -> choice = 9
                         Keys.DIGIT_0 -> choice = 0
 
-                        Keys.LEFT -> choice = if (choice == 1) 0 else if (choice == 0) 9 else choice - 1
-                        Keys.DOWN -> choice = if (choice == 1) 0 else if (choice == 0) 9 else choice - 1
-                        Keys.RIGHT -> choice = if (choice == 9) 0 else if (choice == 0) 1 else choice + 1
-                        Keys.UP -> choice = if (choice == 9) 0 else if (choice == 0) 1 else choice + 1
+                        Keys.LEFT, Keys.UP ->
+                            choice =
+                                if (choice == 1) {
+                                    0
+                                } else if (choice == 0) {
+                                    9
+                                } else {
+                                    choice - 1
+                                }
+                        Keys.RIGHT, Keys.DOWN ->
+                            choice =
+                                if (choice == 9) {
+                                    0
+                                } else if (choice == 0) {
+                                    1
+                                } else {
+                                    choice + 1
+                                }
 
                         Keys.ENTER -> {
                             when (choice) {
@@ -219,11 +233,12 @@ fun configureSettings(config: FilameConfig): FilameConfig {
 
     print("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ")
     val mockModeInput = scanner.nextLine().lowercase()
-    val mockMode = when {
-        mockModeInput == "y" -> true
-        mockModeInput == "n" -> false
-        else -> config.mockMode
-    }
+    val mockMode =
+        when {
+            mockModeInput == "y" -> true
+            mockModeInput == "n" -> false
+            else -> config.mockMode
+        }
 
     val newConfig =
         config.copy(
@@ -283,11 +298,11 @@ fun scanRepoForPackages(config: FilameConfig): FilameConfig {
     val packageManager = PackageManager(config)
     val scanResult = packageManager.scanRepoForPackages()
 
-    if (scanResult.isSuccess) {
+    return if (scanResult.isSuccess) {
         val bundles = scanResult.getOrNull() ?: emptyList()
         val newConfig = config.copy(packageBundles = bundles)
         saveConfig(newConfig)
-        
+
         session {
             section {
                 green { textLine("✓ Found ${bundles.size} package bundle(s)") }
@@ -302,14 +317,14 @@ fun scanRepoForPackages(config: FilameConfig): FilameConfig {
                 }
             }.run()
         }
-        return newConfig
+        newConfig
     } else {
         session {
             section {
                 red { textLine("Error scanning repository: ${scanResult.exceptionOrNull()?.message}") }
             }.run()
         }
-        return config
+        config
     }
 }
 
@@ -319,7 +334,7 @@ fun scanRepoForPackages(config: FilameConfig): FilameConfig {
 fun listPackageBundles(config: FilameConfig) {
     val packageManager = PackageManager(config)
     val statuses = packageManager.getPackageStatuses()
-    
+
     session {
         section {
             cyan { textLine("═══ Package Bundles ═══") }
@@ -332,22 +347,22 @@ fun listPackageBundles(config: FilameConfig) {
             } else {
                 config.packageBundles.forEachIndexed { index, bundle ->
                     white { text("${index + 1}. ") }
-                    
+
                     if (statuses[bundle] == true) {
                         green { text("[✓] ") }
                     } else {
                         red { text("[✗] ") }
                     }
-                    
+
                     cyan { text(bundle.name) }
                     text(" (${bundle.source})")
                     textLine()
-                    
+
                     if (bundle.description.isNotEmpty()) {
                         text("   ")
                         textLine(bundle.description)
                     }
-                    
+
                     if (bundle.configFiles.isNotEmpty()) {
                         text("   Config files: ")
                         textLine("${bundle.configFiles.size}")
@@ -418,14 +433,15 @@ fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
     }
 
     val bundle = PackageBundle(name, source, description, configFiles)
-    
+
     // Check if bundle already exists and replace it
     val existingIndex = config.packageBundles.indexOfFirst { it.name == name }
-    val newBundles = if (existingIndex >= 0) {
-        config.packageBundles.toMutableList().apply { set(existingIndex, bundle) }
-    } else {
-        config.packageBundles + bundle
-    }
+    val newBundles =
+        if (existingIndex >= 0) {
+            config.packageBundles.toMutableList().apply { set(existingIndex, bundle) }
+        } else {
+            config.packageBundles + bundle
+        }
 
     val newConfig = config.copy(packageBundles = newBundles)
     saveConfig(newConfig)
@@ -434,11 +450,11 @@ fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
     if (newConfig.githubRepo.isNotEmpty()) {
         val gitManager = GitManager(newConfig)
         val gitResult = gitManager.initializeRepo()
-        
+
         if (gitResult.isSuccess) {
             val packageManager = PackageManager(newConfig)
             val exportResult = packageManager.exportPackageMetadata(bundle)
-            
+
             if (exportResult.isSuccess) {
                 session {
                     section {
@@ -520,7 +536,7 @@ fun installPackageWithConfig(config: FilameConfig) {
                 text("Install paru now? (y/n): ")
             }.run()
         }
-        
+
         if (scanner.nextLine().lowercase() == "y") {
             println("Installing paru...")
             val paruResult = packageManager.installParu()
@@ -597,7 +613,7 @@ fun installAllMissingPackages(config: FilameConfig) {
     }
 
     val packageManager = PackageManager(config)
-    
+
     // Check if paru is needed for any AUR packages
     val needsParu = config.packageBundles.any { it.source == "aur" }
     if (needsParu && !packageManager.isParuInstalled()) {
@@ -607,7 +623,7 @@ fun installAllMissingPackages(config: FilameConfig) {
                 text("Install paru now? (y/n): ")
             }.run()
         }
-        
+
         if (scanner.nextLine().lowercase() == "y") {
             println("Installing paru...")
             val paruResult = packageManager.installParu()
@@ -665,7 +681,7 @@ fun updateAllPackages(config: FilameConfig) {
 
     val packageManager = PackageManager(config)
     println("Updating all packages... This may take a while.")
-    
+
     val result = packageManager.updatePackages()
 
     if (result.isSuccess) {
@@ -727,7 +743,7 @@ fun exportPackageConfigs(config: FilameConfig) {
         if (exportResult.isSuccess) {
             totalExported += exportResult.getOrNull()?.size ?: 0
         }
-        
+
         // Export package metadata
         val metadataResult = packageManager.exportPackageMetadata(bundle)
         if (metadataResult.isSuccess) {
@@ -913,5 +929,3 @@ fun syncPush(config: FilameConfig) {
 
     git.close()
 }
-
-
