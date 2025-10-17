@@ -51,6 +51,11 @@ fun main(vararg args: String) {
 private fun isInteractive(): Boolean = System.console() != null
 
 /**
+ * Common completions for yes/no prompts
+ */
+private val yesNoCompletions: Completions = Completions("y", "n", "yes", "no")
+
+/**
  * Display a colored header (interactive) or plain text (non-interactive)
  */
 private fun displayHeader(text: String) {
@@ -82,8 +87,9 @@ private inline fun safeSession(crossinline block: () -> Unit) {
 
 /**
  * Read a line of input using Kotter if interactive, otherwise readln
+ * Returns null on EOF in non-interactive mode
  */
-private fun readInput(prompt: String = "", completions: Completions? = null): String {
+private fun readInputNullable(prompt: String = "", completions: Completions? = null): String? {
     return if (isInteractive()) {
         var result = ""
         session {
@@ -110,10 +116,17 @@ private fun readInput(prompt: String = "", completions: Completions? = null): St
         try {
             readln()
         } catch (e: Exception) {
-            // Handle EOF or other read errors gracefully
-            ""
+            // Handle EOF or other read errors - return null to signal EOF
+            null
         }
     }
+}
+
+/**
+ * Read a line of input, returning empty string on EOF
+ */
+private fun readInput(prompt: String = "", completions: Completions? = null): String {
+    return readInputNullable(prompt, completions) ?: ""
 }
 
 /**
@@ -219,10 +232,10 @@ fun showMainMenuNonInteractive(initialConfig: FilameConfig) {
         println("0. Exit")
         println()
 
-        val choice = readInput("Enter your choice: ")
+        val choice = readInputNullable("Enter your choice: ")
         
-        // Handle EOF gracefully
-        if (choice.isEmpty() && !isInteractive()) {
+        // Handle EOF (null return) in non-interactive mode
+        if (choice == null) {
             println("Thanks for using Filame! Goodbye!")
             running = false
             continue
@@ -386,7 +399,7 @@ fun configureSettings(config: FilameConfig): FilameConfig {
 
     val githubRepo = readInput("Enter GitHub repository URL (current: ${config.githubRepo}): ").ifEmpty { config.githubRepo }
 
-    val mockModeInput = readInput("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ", Completions("y", "n", "yes", "no")).lowercase()
+    val mockModeInput = readInput("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ", yesNoCompletions).lowercase()
     val mockMode =
         when (mockModeInput) {
             "y" -> true
@@ -560,13 +573,11 @@ fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
         return config
     }
 
-    val sourceCompletions = Completions("official", "aur")
-    val source = readInput("Enter source (official/aur) [official]: ", sourceCompletions).ifEmpty { "official" }
+    val source = readInput("Enter source (official/aur) [official]: ", Completions("official", "aur")).ifEmpty { "official" }
 
     val description = readInput("Enter description (optional): ")
 
     // Ask if user wants to add config files
-    val yesNoCompletions = Completions("y", "n", "yes", "no")
     val addConfigs = readInput("Add configuration files? (y/n) [n]: ", yesNoCompletions).lowercase() == "y"
 
     val configFiles = mutableListOf<ConfigFile>()
@@ -690,7 +701,7 @@ fun installPackageWithConfig(config: FilameConfig) {
             }.run()
         }
 
-        if (readInput("Install paru now? (y/n): ", Completions("y", "n", "yes", "no")).lowercase() == "y") {
+        if (readInput("Install paru now? (y/n): ", yesNoCompletions).lowercase() == "y") {
             println("Installing paru...")
             val paruResult = packageManager.installParu()
             if (paruResult.isFailure) {
@@ -776,7 +787,7 @@ fun installAllMissingPackages(config: FilameConfig) {
             }.run()
         }
 
-        if (readInput("Install paru now? (y/n): ", Completions("y", "n", "yes", "no")).lowercase() == "y") {
+        if (readInput("Install paru now? (y/n): ", yesNoCompletions).lowercase() == "y") {
             println("Installing paru...")
             val paruResult = packageManager.installParu()
             if (paruResult.isFailure) {
