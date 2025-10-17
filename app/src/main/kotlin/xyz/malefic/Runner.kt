@@ -84,6 +84,7 @@ fun showMainMenu(initialConfig: FilameConfig) {
 
     while (running) {
         session {
+            var exit by liveVarOf(false)
             var choice by liveVarOf(0)
             section {
                 cyan { textLine("╔════════════════════════════════════════╗") }
@@ -108,6 +109,8 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 }
                 textLine()
 
+                textLine("Select an option: ")
+
                 arrayListOf(
                     "1. Configure settings",
                     "2. Scan repo for packages",
@@ -129,7 +132,10 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 }
                 textLine()
 
-                text("Select an option: ")
+                if (exit) {
+                    green { textLine("Thanks for using Filame! Goodbye!") }
+                    running = false
+                }
             }.runUntilKeyPressed(
                 Keys.DIGIT_1,
                 Keys.DIGIT_2,
@@ -157,21 +163,17 @@ fun showMainMenu(initialConfig: FilameConfig) {
 
                         Keys.LEFT, Keys.UP ->
                             choice =
-                                if (choice == 1) {
-                                    0
-                                } else if (choice == 0) {
-                                    9
-                                } else {
-                                    choice - 1
+                                when (choice) {
+                                    1 -> 0
+                                    0 -> 9
+                                    else -> choice - 1
                                 }
                         Keys.RIGHT, Keys.DOWN ->
                             choice =
-                                if (choice == 9) {
-                                    0
-                                } else if (choice == 0) {
-                                    1
-                                } else {
-                                    choice + 1
+                                when (choice) {
+                                    9 -> 0
+                                    0 -> 1
+                                    else -> choice + 1
                                 }
 
                         Keys.ENTER -> {
@@ -185,31 +187,13 @@ fun showMainMenu(initialConfig: FilameConfig) {
                                 7 -> updateAllPackages(config)
                                 8 -> exportPackageConfigs(config)
                                 9 -> config = syncWithGitHub(config)
-                                0 -> {
-                                    session {
-                                        section {
-                                            green { textLine("Thanks for using Filame! Goodbye!") }
-                                        }.run()
-                                    }
-                                    running = false
-                                }
-                                else -> {
-                                    section {
-                                        red { textLine("Invalid option. Please try again.") }
-                                    }.run()
-                                }
+                                0 -> exit = true
+                                else -> { /* no-op */ }
                             }
                         }
                     }
-                    rerender()
-                    println("Choice is $choice")
                 }
             }
-        }
-
-        if (running) {
-            println("\nPress Enter to continue...")
-            scanner.nextLine()
         }
     }
 }
@@ -234,9 +218,9 @@ fun configureSettings(config: FilameConfig): FilameConfig {
     print("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ")
     val mockModeInput = scanner.nextLine().lowercase()
     val mockMode =
-        when {
-            mockModeInput == "y" -> true
-            mockModeInput == "n" -> false
+        when (mockModeInput) {
+            "y" -> true
+            "n" -> false
             else -> config.mockMode
         }
 

@@ -13,15 +13,16 @@ class PackageManager(
     private val repoDir: File = File(System.getProperty("user.home"), ".config/filame/repo"),
 ) {
     private val isMockMode: Boolean = config.mockMode
+
     /**
      * Check if paru is installed
      */
     fun isParuInstalled(): Boolean {
         if (isMockMode) return true // In mock mode, assume paru is available
         return try {
-            val process = Runtime.getRuntime().exec("which paru")
+            val process = ProcessBuilder("which", "paru").start()
             process.waitFor() == 0
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -34,7 +35,7 @@ class PackageManager(
             println("[MOCK] Would install paru AUR helper")
             return Result.success(Unit)
         }
-        
+
         return try {
             if (isParuInstalled()) {
                 return Result.success(Unit)
@@ -43,12 +44,13 @@ class PackageManager(
             // Install dependencies
             val deps = arrayOf("git", "base-devel")
             for (dep in deps) {
-                val checkProcess = Runtime.getRuntime().exec("pacman -Qq $dep")
+                val checkProcess = ProcessBuilder("pacman", "-Qq", dep).start()
                 if (checkProcess.waitFor() != 0) {
-                    val installProcess = ProcessBuilder("sudo", "pacman", "-S", "--noconfirm", dep)
-                        .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                        .redirectError(ProcessBuilder.Redirect.INHERIT)
-                        .start()
+                    val installProcess =
+                        ProcessBuilder("sudo", "pacman", "-S", "--noconfirm", dep)
+                            .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                            .redirectError(ProcessBuilder.Redirect.INHERIT)
+                            .start()
                     if (installProcess.waitFor() != 0) {
                         return Result.failure(Exception("Failed to install $dep"))
                     }
@@ -59,24 +61,26 @@ class PackageManager(
             val tmpDir = File("/tmp/paru-install-${System.currentTimeMillis()}")
             tmpDir.mkdirs()
 
-            val cloneProcess = ProcessBuilder("git", "clone", "https://aur.archlinux.org/paru.git")
-                .directory(tmpDir)
-                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            
+            val cloneProcess =
+                ProcessBuilder("git", "clone", "https://aur.archlinux.org/paru.git")
+                    .directory(tmpDir)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                    .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+
             if (cloneProcess.waitFor() != 0) {
                 tmpDir.deleteRecursively()
                 return Result.failure(Exception("Failed to clone paru repository"))
             }
 
             val paruDir = File(tmpDir, "paru")
-            val buildProcess = ProcessBuilder("makepkg", "-si", "--noconfirm")
-                .directory(paruDir)
-                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            
+            val buildProcess =
+                ProcessBuilder("makepkg", "-si", "--noconfirm")
+                    .directory(paruDir)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                    .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+
             val exitCode = buildProcess.waitFor()
             tmpDir.deleteRecursively()
 
@@ -93,29 +97,30 @@ class PackageManager(
     /**
      * Search for packages in official repos and AUR
      */
-    fun searchPackages(query: String): Result<List<PackageSearchResult>> {
-        return try {
+    fun searchPackages(query: String): Result<List<PackageSearchResult>> =
+        try {
             val results = mutableListOf<PackageSearchResult>()
 
             // Search official repos with pacman
-            val pacmanProcess = ProcessBuilder("pacman", "-Ss", query)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            
+            val pacmanProcess =
+                ProcessBuilder("pacman", "-Ss", query)
+                    .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+
             val pacmanReader = BufferedReader(InputStreamReader(pacmanProcess.inputStream))
             var line: String?
             var currentPackage: String? = null
-            
+
             while (pacmanReader.readLine().also { line = it } != null) {
                 if (line!!.startsWith(" ")) {
                     // This is a description line
                     if (currentPackage != null) {
-                        results.add(PackageSearchResult(currentPackage, "official", line!!.trim()))
+                        results.add(PackageSearchResult(currentPackage, "official", line.trim()))
                         currentPackage = null
                     }
                 } else {
                     // This is a package line
-                    val parts = line!!.split("/")
+                    val parts = line.split("/")
                     if (parts.size >= 2) {
                         val packageInfo = parts[1].split(" ")
                         currentPackage = packageInfo[0]
@@ -126,26 +131,27 @@ class PackageManager(
 
             // Search AUR with paru if available
             if (isParuInstalled()) {
-                val paruProcess = ProcessBuilder("paru", "-Ssa", query)
-                    .redirectError(ProcessBuilder.Redirect.INHERIT)
-                    .start()
-                
+                val paruProcess =
+                    ProcessBuilder("paru", "-Ssa", query)
+                        .redirectError(ProcessBuilder.Redirect.INHERIT)
+                        .start()
+
                 val paruReader = BufferedReader(InputStreamReader(paruProcess.inputStream))
                 currentPackage = null
-                
+
                 while (paruReader.readLine().also { line = it } != null) {
                     if (line!!.startsWith(" ")) {
                         // This is a description line
                         if (currentPackage != null) {
                             // Only add if not already in results from pacman
                             if (!results.any { it.name == currentPackage }) {
-                                results.add(PackageSearchResult(currentPackage!!, "aur", line!!.trim()))
+                                results.add(PackageSearchResult(currentPackage, "aur", line.trim()))
                             }
                             currentPackage = null
                         }
                     } else {
                         // This is a package line
-                        val parts = line!!.split("/")
+                        val parts = line.split("/")
                         if (parts.size >= 2) {
                             val packageInfo = parts[1].split(" ")
                             currentPackage = packageInfo[0]
@@ -159,7 +165,6 @@ class PackageManager(
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /**
      * Check if a package is installed
@@ -167,9 +172,9 @@ class PackageManager(
     fun isPackageInstalled(packageName: String): Boolean {
         if (isMockMode) return false // In mock mode, packages are never "installed"
         return try {
-            val process = Runtime.getRuntime().exec("pacman -Qq $packageName")
+            val process = ProcessBuilder("pacman", "-Qq", packageName).start()
             process.waitFor() == 0
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -177,11 +182,10 @@ class PackageManager(
     /**
      * Get installation status of all tracked packages
      */
-    fun getPackageStatuses(): Map<PackageBundle, Boolean> {
-        return config.packageBundles.associateWith { pkg ->
+    fun getPackageStatuses(): Map<PackageBundle, Boolean> =
+        config.packageBundles.associateWith { pkg ->
             isPackageInstalled(pkg.name)
         }
-    }
 
     /**
      * Install a package
@@ -191,24 +195,26 @@ class PackageManager(
             println("[MOCK] Would install package: ${pkg.name} from ${pkg.source}")
             return Result.success(Unit)
         }
-        
-        return try {
-            val command = if (pkg.source == "aur") {
-                if (!isParuInstalled()) {
-                    return Result.failure(Exception("Paru is required for AUR packages but not installed"))
-                }
-                arrayOf("paru", "-S", "--noconfirm", pkg.name)
-            } else {
-                arrayOf("sudo", "pacman", "-S", "--noconfirm", pkg.name)
-            }
 
-            val process = ProcessBuilder(*command)
-                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            
+        return try {
+            val command =
+                if (pkg.source == "aur") {
+                    if (!isParuInstalled()) {
+                        return Result.failure(Exception("Paru is required for AUR packages but not installed"))
+                    }
+                    arrayOf("paru", "-S", "--noconfirm", pkg.name)
+                } else {
+                    arrayOf("sudo", "pacman", "-S", "--noconfirm", pkg.name)
+                }
+
+            val process =
+                ProcessBuilder(*command)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                    .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+
             val exitCode = process.waitFor()
-            
+
             if (exitCode != 0) {
                 Result.failure(Exception("Failed to install package ${pkg.name}"))
             } else {
@@ -225,7 +231,7 @@ class PackageManager(
     fun installMissingPackages(): Result<List<String>> {
         val installed = mutableListOf<String>()
         val statuses = getPackageStatuses()
-        
+
         for ((pkg, isInstalled) in statuses) {
             if (!isInstalled) {
                 val result = installPackage(pkg)
@@ -236,7 +242,7 @@ class PackageManager(
                 }
             }
         }
-        
+
         return Result.success(installed)
     }
 
@@ -300,32 +306,33 @@ class PackageManager(
      * Export package bundle metadata to repo as package.yaml
      * This enables two-way sync of package configurations
      */
-    fun exportPackageMetadata(bundle: PackageBundle): Result<String> {
-        return try {
+    fun exportPackageMetadata(bundle: PackageBundle): Result<String> =
+        try {
             // Determine the package directory name from config files or use the package name
-            val packageDirName = if (bundle.configFiles.isNotEmpty()) {
-                // Extract directory from first config file destination path
-                val firstDestPath = bundle.configFiles[0].destinationPath
-                firstDestPath.substringBefore("/")
-            } else {
-                bundle.name
-            }
+            val packageDirName =
+                if (bundle.configFiles.isNotEmpty()) {
+                    // Extract directory from first config file destination path
+                    val firstDestPath = bundle.configFiles[0].destinationPath
+                    firstDestPath.substringBefore("/")
+                } else {
+                    bundle.name
+                }
 
             val packageDir = File(repoDir, packageDirName)
             packageDir.mkdirs()
 
             val metadataFile = File(packageDir, "package.yaml")
-            val yaml = Yaml.default.encodeToString(
-                PackageBundle.serializer(),
-                bundle
-            )
+            val yaml =
+                Yaml.default.encodeToString(
+                    PackageBundle.serializer(),
+                    bundle,
+                )
             metadataFile.writeText(yaml)
 
             Result.success(metadataFile.relativeTo(repoDir).path)
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /**
      * Scan repository directory for package bundles
@@ -334,7 +341,7 @@ class PackageManager(
     fun scanRepoForPackages(): Result<List<PackageBundle>> {
         return try {
             val bundles = mutableListOf<PackageBundle>()
-            
+
             if (!repoDir.exists()) {
                 return Result.success(emptyList())
             }
@@ -342,47 +349,49 @@ class PackageManager(
             // Look for package directories (each subdirectory is a potential package)
             repoDir.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { packageDir ->
                 val metadataFile = File(packageDir, "package.yaml")
-                
+
                 if (metadataFile.exists()) {
                     // Parse package metadata
                     try {
                         val yaml = metadataFile.readText()
-                        val bundle = Yaml.default.decodeFromString(
-                            PackageBundle.serializer(),
-                            yaml
-                        )
+                        val bundle =
+                            Yaml.default.decodeFromString(
+                                PackageBundle.serializer(),
+                                yaml,
+                            )
                         bundles.add(bundle)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Skip packages with invalid metadata
                     }
                 } else {
                     // Create a basic package bundle from directory structure
-                    val configFiles = packageDir.walkTopDown()
-                        .filter { it.isFile && !it.name.startsWith(".") }
-                        .map { file ->
-                            val relativePath = file.relativeTo(packageDir).path
-                            val userHome = System.getProperty("user.home")
-                            ConfigFile(
-                                sourcePath = "$userHome/.config/${packageDir.name}/$relativePath",
-                                destinationPath = "${packageDir.name}/$relativePath",
-                                description = ""
-                            )
-                        }
-                        .toList()
-                    
+                    val configFiles =
+                        packageDir
+                            .walkTopDown()
+                            .filter { it.isFile && !it.name.startsWith(".") }
+                            .map { file ->
+                                val relativePath = file.relativeTo(packageDir).path
+                                val userHome = System.getProperty("user.home")
+                                ConfigFile(
+                                    sourcePath = "$userHome/.config/${packageDir.name}/$relativePath",
+                                    destinationPath = "${packageDir.name}/$relativePath",
+                                    description = "",
+                                )
+                            }.toList()
+
                     if (configFiles.isNotEmpty()) {
                         bundles.add(
                             PackageBundle(
                                 name = packageDir.name,
                                 source = "official",
                                 description = "",
-                                configFiles = configFiles
-                            )
+                                configFiles = configFiles,
+                            ),
                         )
                     }
                 }
             }
-            
+
             Result.success(bundles)
         } catch (e: Exception) {
             Result.failure(e)
@@ -397,25 +406,27 @@ class PackageManager(
             println("[MOCK] Would update all packages")
             return Result.success(Unit)
         }
-        
+
         return try {
             // Update official packages
-            val pacmanProcess = ProcessBuilder("sudo", "pacman", "-Syu", "--noconfirm")
-                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            
+            val pacmanProcess =
+                ProcessBuilder("sudo", "pacman", "-Syu", "--noconfirm")
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                    .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+
             if (pacmanProcess.waitFor() != 0) {
                 return Result.failure(Exception("Failed to update official packages"))
             }
 
             // Update AUR packages if paru is installed
             if (isParuInstalled()) {
-                val paruProcess = ProcessBuilder("paru", "-Sua", "--noconfirm")
-                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                    .redirectError(ProcessBuilder.Redirect.INHERIT)
-                    .start()
-                
+                val paruProcess =
+                    ProcessBuilder("paru", "-Sua", "--noconfirm")
+                        .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                        .redirectError(ProcessBuilder.Redirect.INHERIT)
+                        .start()
+
                 if (paruProcess.waitFor() != 0) {
                     return Result.failure(Exception("Failed to update AUR packages"))
                 }
@@ -435,15 +446,16 @@ class PackageManager(
             println("[MOCK] Would remove package: $packageName")
             return Result.success(Unit)
         }
-        
+
         return try {
-            val process = ProcessBuilder("sudo", "pacman", "-R", "--noconfirm", packageName)
-                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            
+            val process =
+                ProcessBuilder("sudo", "pacman", "-R", "--noconfirm", packageName)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                    .redirectError(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+
             val exitCode = process.waitFor()
-            
+
             if (exitCode != 0) {
                 Result.failure(Exception("Failed to remove package $packageName"))
             } else {
