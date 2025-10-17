@@ -74,7 +74,7 @@ fun showMainMenu(initialConfig: FilameConfig) {
 
     while (running) {
         session {
-            var choice by liveVarOf(9)
+            var choice by liveVarOf(0)
             section {
                 cyan { textLine("╔════════════════════════════════════════╗") }
                 cyan {
@@ -93,6 +93,7 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 textLine("Current device: ${config.deviceName.ifEmpty { "Not set" }}")
                 textLine("GitHub repo: ${config.githubRepo.ifEmpty { "Not set" }}")
                 textLine("Config files: ${config.configFiles.size}")
+                textLine("Packages: ${config.packages.size}")
                 textLine()
 
                 arrayListOf(
@@ -104,9 +105,11 @@ fun showMainMenu(initialConfig: FilameConfig) {
                     "6. Sync with GitHub (pull)",
                     "7. Sync with GitHub (push)",
                     "8. Manage ignore patterns",
-                    "9. Exit",
+                    "9. Manage packages",
+                    "0. Exit",
                 ).forEachIndexed { i, line ->
-                    if (choice == i + 1) {
+                    val index = if (i == 9) 0 else i + 1
+                    if (choice == index) {
                         cyan { textLine(line) }
                     } else {
                         green { textLine(line) }
@@ -125,6 +128,7 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 Keys.DIGIT_7,
                 Keys.DIGIT_8,
                 Keys.DIGIT_9,
+                Keys.DIGIT_0,
             ) {
                 onKeyPressed {
                     when (key) {
@@ -137,11 +141,12 @@ fun showMainMenu(initialConfig: FilameConfig) {
                         Keys.DIGIT_7 -> choice = 7
                         Keys.DIGIT_8 -> choice = 8
                         Keys.DIGIT_9 -> choice = 9
+                        Keys.DIGIT_0 -> choice = 0
 
-                        Keys.LEFT -> choice = if (choice == 1) 9 else choice - 1
-                        Keys.DOWN -> choice = if (choice == 1) 9 else choice - 1
-                        Keys.RIGHT -> choice = if (choice == 9) 1 else choice + 1
-                        Keys.UP -> choice = if (choice == 9) 1 else choice + 1
+                        Keys.LEFT -> choice = if (choice == 1) 0 else if (choice == 0) 9 else choice - 1
+                        Keys.DOWN -> choice = if (choice == 1) 0 else if (choice == 0) 9 else choice - 1
+                        Keys.RIGHT -> choice = if (choice == 9) 0 else if (choice == 0) 1 else choice + 1
+                        Keys.UP -> choice = if (choice == 9) 0 else if (choice == 0) 1 else choice + 1
 
                         Keys.ENTER -> {
                             when (choice) {
@@ -153,7 +158,8 @@ fun showMainMenu(initialConfig: FilameConfig) {
                                 6 -> syncPull(config)
                                 7 -> syncPush(config)
                                 8 -> config = manageIgnorePatterns(config)
-                                9 -> {
+                                9 -> config = managePackages(config)
+                                0 -> {
                                     session {
                                         section {
                                             green { textLine("Thanks for using Filame! Goodbye!") }
@@ -611,6 +617,269 @@ fun manageIgnorePatterns(config: FilameConfig): FilameConfig {
                 }
             }
             "3" -> managing = false
+        }
+
+        if (managing) {
+            println("\nPress Enter to continue...")
+            scanner.nextLine()
+        }
+    }
+
+    return currentConfig
+}
+
+/**
+ * Manage packages
+ */
+fun managePackages(config: FilameConfig): FilameConfig {
+    var currentConfig = config
+    var managing = true
+    val packageManager = PackageManager(currentConfig)
+
+    while (managing) {
+        session {
+            section {
+                cyan { textLine("═══ Manage Packages ═══") }
+                textLine()
+
+                // Show paru status
+                if (packageManager.isParuInstalled()) {
+                    green { textLine("✓ Paru is installed") }
+                } else {
+                    yellow { textLine("⚠ Paru is not installed (required for AUR packages)") }
+                }
+                textLine()
+
+                // Show tracked packages
+                if (currentConfig.packages.isEmpty()) {
+                    yellow { textLine("No packages tracked yet.") }
+                } else {
+                    textLine("Tracked packages:")
+                    val statuses = packageManager.getPackageStatuses()
+                    currentConfig.packages.forEachIndexed { index, pkg ->
+                        white { text("${index + 1}. ") }
+                        if (statuses[pkg] == true) {
+                            green { text("[✓] ") }
+                        } else {
+                            red { text("[✗] ") }
+                        }
+                        cyan { text(pkg.name) }
+                        text(" (${pkg.source})")
+                        if (pkg.description.isNotEmpty()) {
+                            text(" - ${pkg.description}")
+                        }
+                        textLine()
+                    }
+                }
+
+                textLine()
+                green { textLine("1. Install paru (if not installed)") }
+                green { textLine("2. Add package") }
+                green { textLine("3. Search packages") }
+                green { textLine("4. Install missing packages") }
+                green { textLine("5. Update all packages") }
+                green { textLine("6. Remove package from tracking") }
+                green { textLine("7. Uninstall package from system") }
+                cyan { textLine("8. Back to main menu") }
+                textLine()
+                text("Select an option: ")
+            }.run()
+        }
+
+        when (scanner.nextLine()) {
+            "1" -> {
+                if (packageManager.isParuInstalled()) {
+                    session {
+                        section {
+                            green { textLine("✓ Paru is already installed") }
+                        }.run()
+                    }
+                } else {
+                    session {
+                        section {
+                            yellow { textLine("Installing paru... This may take a few minutes.") }
+                        }.run()
+                    }
+                    val result = packageManager.installParu()
+                    if (result.isSuccess) {
+                        session {
+                            section {
+                                green { textLine("✓ Paru installed successfully!") }
+                            }.run()
+                        }
+                    } else {
+                        session {
+                            section {
+                                red { textLine("Error installing paru: ${result.exceptionOrNull()?.message}") }
+                            }.run()
+                        }
+                    }
+                }
+            }
+            "2" -> {
+                print("Enter package name: ")
+                val name = scanner.nextLine()
+                if (name.isEmpty()) {
+                    session {
+                        section {
+                            red { textLine("Package name cannot be empty.") }
+                        }.run()
+                    }
+                } else {
+                    print("Enter source (official/aur) [official]: ")
+                    val source = scanner.nextLine().ifEmpty { "official" }
+                    print("Enter description (optional): ")
+                    val description = scanner.nextLine()
+                    
+                    val pkg = Package(name, source, description)
+                    currentConfig = currentConfig.copy(packages = currentConfig.packages + pkg)
+                    saveConfig(currentConfig)
+                    session {
+                        section {
+                            green { textLine("✓ Package added to tracking") }
+                        }.run()
+                    }
+                }
+            }
+            "3" -> {
+                print("Enter search query: ")
+                val query = scanner.nextLine()
+                if (query.isNotEmpty()) {
+                    session {
+                        section {
+                            yellow { textLine("Searching for '$query'...") }
+                        }.run()
+                    }
+                    val result = packageManager.searchPackages(query)
+                    if (result.isSuccess) {
+                        val results = result.getOrNull() ?: emptyList()
+                        session {
+                            section {
+                                if (results.isEmpty()) {
+                                    yellow { textLine("No packages found.") }
+                                } else {
+                                    cyan { textLine("Search results:") }
+                                    textLine()
+                                    results.take(20).forEach { pkg ->
+                                        white { text("• ") }
+                                        cyan { text(pkg.name) }
+                                        text(" (${pkg.source})")
+                                        if (pkg.description.isNotEmpty()) {
+                                            textLine()
+                                            text("  ${pkg.description}")
+                                        }
+                                        textLine()
+                                    }
+                                    if (results.size > 20) {
+                                        yellow { textLine("\n... and ${results.size - 20} more results") }
+                                    }
+                                }
+                            }.run()
+                        }
+                    } else {
+                        session {
+                            section {
+                                red { textLine("Error searching packages: ${result.exceptionOrNull()?.message}") }
+                            }.run()
+                        }
+                    }
+                }
+            }
+            "4" -> {
+                session {
+                    section {
+                        yellow { textLine("Installing missing packages...") }
+                    }.run()
+                }
+                val result = packageManager.installMissingPackages()
+                if (result.isSuccess) {
+                    val installed = result.getOrNull() ?: emptyList()
+                    session {
+                        section {
+                            if (installed.isEmpty()) {
+                                green { textLine("✓ All tracked packages are already installed") }
+                            } else {
+                                green { textLine("✓ Installed ${installed.size} package(s):") }
+                                installed.forEach { name ->
+                                    text("  • ")
+                                    textLine(name)
+                                }
+                            }
+                        }.run()
+                    }
+                } else {
+                    session {
+                        section {
+                            red { textLine("Error installing packages: ${result.exceptionOrNull()?.message}") }
+                        }.run()
+                    }
+                }
+            }
+            "5" -> {
+                session {
+                    section {
+                        yellow { textLine("Updating all packages... This may take a while.") }
+                    }.run()
+                }
+                val result = packageManager.updatePackages()
+                if (result.isSuccess) {
+                    session {
+                        section {
+                            green { textLine("✓ All packages updated successfully!") }
+                        }.run()
+                    }
+                } else {
+                    session {
+                        section {
+                            red { textLine("Error updating packages: ${result.exceptionOrNull()?.message}") }
+                        }.run()
+                    }
+                }
+            }
+            "6" -> {
+                if (currentConfig.packages.isNotEmpty()) {
+                    print("Enter package number to remove from tracking: ")
+                    val index = scanner.nextLine().toIntOrNull()?.minus(1)
+                    if (index != null && index in currentConfig.packages.indices) {
+                        val pkg = currentConfig.packages[index]
+                        currentConfig = currentConfig.copy(
+                            packages = currentConfig.packages.filterIndexed { i, _ -> i != index }
+                        )
+                        saveConfig(currentConfig)
+                        session {
+                            section {
+                                green { textLine("✓ Package '${pkg.name}' removed from tracking") }
+                            }.run()
+                        }
+                    }
+                }
+            }
+            "7" -> {
+                print("Enter package name to uninstall: ")
+                val packageName = scanner.nextLine()
+                if (packageName.isNotEmpty()) {
+                    session {
+                        section {
+                            yellow { textLine("Uninstalling $packageName...") }
+                        }.run()
+                    }
+                    val result = packageManager.removePackage(packageName)
+                    if (result.isSuccess) {
+                        session {
+                            section {
+                                green { textLine("✓ Package '$packageName' uninstalled successfully!") }
+                            }.run()
+                        }
+                    } else {
+                        session {
+                            section {
+                                red { textLine("Error uninstalling package: ${result.exceptionOrNull()?.message}") }
+                            }.run()
+                        }
+                    }
+                }
+            }
+            "8" -> managing = false
         }
 
         if (managing) {
