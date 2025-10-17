@@ -100,6 +100,19 @@ configFiles:
   - sourcePath: /home/user/.vimrc
     destinationPath: vimrc
     description: Vim editor configuration
+packages:
+  - name: vim
+    source: official
+    description: Text editor
+  - name: i3-wm
+    source: official
+    description: Tiling window manager
+  - name: yay
+    source: aur
+    description: AUR helper
+  - name: spotify
+    source: aur
+    description: Music streaming client
 ignorePatterns:
   - "*.log"
   - "*.tmp"
@@ -140,6 +153,59 @@ alacritty: ~/.config/alacritty/alacritty.yml → alacritty/alacritty.yml
 kitty: ~/.config/kitty/kitty.conf → kitty/kitty.conf
 terminator: ~/.config/terminator/config → terminator/config
 ```
+
+## Package Management
+
+### Adding Packages to Track
+
+From the Manage Packages menu (option 9):
+
+1. Add official packages:
+   ```
+   Package name: vim
+   Source: official
+   Description: Text editor
+   ```
+
+2. Add AUR packages:
+   ```
+   Package name: spotify
+   Source: aur
+   Description: Music streaming
+   ```
+
+### Installing Paru
+
+If paru is not installed and you try to install an AUR package, Filame will prompt you to install it:
+
+```bash
+# From the package management menu:
+1. Install paru (if not installed)
+# This will automatically:
+# - Install dependencies (git, base-devel)
+# - Clone paru from AUR
+# - Build and install paru
+```
+
+### Installing All Tracked Packages
+
+```bash
+# From the package management menu:
+4. Install missing packages
+# This will install all tracked packages that aren't already on the system
+```
+
+### Complete Setup Example
+
+When setting up a new Arch system:
+
+1. Configure Filame with your GitHub repo
+2. Pull configuration from GitHub
+3. Install paru (option 9 → 1)
+4. Install all missing packages (option 9 → 4)
+5. Import configs (option 5)
+
+Your system is now configured with all your dotfiles and packages!
 
 ## Tips
 

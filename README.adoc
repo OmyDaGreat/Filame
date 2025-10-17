@@ -9,6 +9,8 @@ Filame helps you:
 - *Sync configurations* across multiple Arch Linux devices
 - *Track dotfiles* and system configurations in a centralized location
 - *Integrate with GitHub* for version control and backup
+- *Manage packages* from official repos and AUR with paru support
+- *Auto-install packages* with configurations for a complete setup
 - *Manage ignore patterns* to exclude sensitive or unnecessary files
 - *Beautiful terminal UI* powered by Kotter with color-coded output
 
@@ -18,6 +20,8 @@ Filame helps you:
 🔄 *Bidirectional Sync* - Export local configs to repo or import from repo
 🌐 *GitHub Integration* - Pull and push changes with full Git support
 📋 *Configuration Tracking* - Track any file or directory on your system
+📦 *Package Management* - Track, install, and manage official and AUR packages
+🛠️ *Paru Support* - Auto-install paru AUR helper when needed
 🚫 *Ignore Patterns* - Exclude files with glob patterns
 🎨 *Terminal UI* - Beautiful color-coded interface using Kotter
 
@@ -102,6 +106,25 @@ cd Filame
 
 2. Add or remove patterns (e.g., `*.log`, `*.tmp`, `.cache/*`)
 
+=== Managing Packages
+
+1. Select *9. Manage packages*
+
+2. Options available:
+   - Install paru (AUR helper) if not already installed
+   - Add packages to track
+   - Search for packages in official repos and AUR
+   - Install missing tracked packages
+   - Update all packages
+   - Remove packages from tracking
+   - Uninstall packages from system
+
+3. Package tracking example:
+   - Add package: `vim` (official)
+   - Add package: `yay` (aur)
+   - Install all missing packages
+   - Update all packages
+
 == Configuration File
 
 Filame stores its configuration in `~/.config/filame/config.yaml`
@@ -118,6 +141,13 @@ configFiles:
   - sourcePath: /home/user/.bashrc
     destinationPath: bashrc
     description: Bash configuration
+packages:
+  - name: vim
+    source: official
+    description: Text editor
+  - name: yay
+    source: aur
+    description: AUR helper
 ignorePatterns:
   - "*.log"
   - "*.tmp"
@@ -186,6 +216,8 @@ The distribution will be created in `app/build/distributions/`
 
 == Roadmap
 
+- [x] Support for package management (official and AUR)
+- [x] Paru AUR helper integration
 - [ ] Support for encrypted sensitive files
 - [ ] Automatic backup before applying changes
 - [ ] Diff viewer before importing configs
