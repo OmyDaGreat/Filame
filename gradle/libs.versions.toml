@@ -1,5 +1,5 @@
 [versions]
-kotter = "1.1.2"
+kotter = "1.2.1"
 jgit = "7.4.0.202509020913-r"
 serialization = "1.7.3"
 kaml = "0.98.0"
