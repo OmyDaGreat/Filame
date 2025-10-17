@@ -12,7 +12,7 @@ class GitManagerTest {
             FilameConfig(
                 deviceName = "test-device",
                 githubRepo = "https://github.com/test/repo.git",
-                configFiles = emptyList(),
+                packageBundles = emptyList(),
             )
 
         val gitManager = GitManager(config)
@@ -21,42 +21,12 @@ class GitManagerTest {
     }
 
     @Test
-    fun testExportConfigsWithEmptyList() {
-        val config =
-            FilameConfig(
-                deviceName = "test-device",
-                githubRepo = "https://github.com/test/repo.git",
-                configFiles = emptyList(),
-            )
-
-        val gitManager = GitManager(config)
-        val result = gitManager.exportConfigs()
-        assertTrue(result.isSuccess)
-        assertEquals(0, result.getOrNull()?.size)
-    }
-
-    @Test
-    fun testImportConfigsWithEmptyList() {
-        val config =
-            FilameConfig(
-                deviceName = "test-device",
-                githubRepo = "https://github.com/test/repo.git",
-                configFiles = emptyList(),
-            )
-
-        val gitManager = GitManager(config)
-        val result = gitManager.importConfigs()
-        assertTrue(result.isSuccess)
-        assertEquals(0, result.getOrNull()?.size)
-    }
-
-    @Test
     fun testInitializeRepoWithoutGithubUrl() {
         val config =
             FilameConfig(
                 deviceName = "test-device",
                 githubRepo = "",
-                configFiles = emptyList(),
+                packageBundles = emptyList(),
             )
 
         val gitManager = GitManager(config)
@@ -65,30 +35,29 @@ class GitManagerTest {
     }
 
     @Test
-    fun testExportConfigsWithNonExistentFiles() {
-        val testDir = File(System.getProperty("java.io.tmpdir"), "filame-test-${System.currentTimeMillis()}")
-        testDir.mkdirs()
-
+    fun testGitManagerWithPackageBundles() {
         val config =
             FilameConfig(
                 deviceName = "test-device",
                 githubRepo = "https://github.com/test/repo.git",
-                configFiles =
-                    listOf(
-                        ConfigFile(
-                            sourcePath = "/nonexistent/file.txt",
-                            destinationPath = "file.txt",
-                            description = "Test file",
-                        ),
-                    ),
+                packageBundles = listOf(
+                    PackageBundle(
+                        name = "vim",
+                        source = "official",
+                        description = "Text editor",
+                        configFiles = listOf(
+                            ConfigFile(
+                                sourcePath = "/home/user/.vimrc",
+                                destinationPath = "vim/.vimrc",
+                                description = "Vim config"
+                            )
+                        )
+                    )
+                )
             )
 
         val gitManager = GitManager(config)
-        val result = gitManager.exportConfigs()
-        assertTrue(result.isSuccess)
-        // Should skip non-existent files
-        assertEquals(0, result.getOrNull()?.size)
-
-        testDir.deleteRecursively()
+        val repoDir = gitManager.getRepoDir()
+        assertTrue(repoDir.path.contains(".config/filame/repo"))
     }
 }

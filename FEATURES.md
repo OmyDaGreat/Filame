@@ -45,13 +45,23 @@
 - **Clear navigation** - Numbered menu options
 - **Interactive prompts** - User-friendly input handling
 
-### 7. Configuration Storage
+### 7. Package Management
+- **Track packages** - Add official and AUR packages to your configuration
+- **Paru integration** - Auto-install paru AUR helper when needed
+- **Package search** - Search both official repos and AUR
+- **Installation status** - Track which packages are installed
+- **Batch install** - Install all tracked packages at once
+- **System updates** - Update all official and AUR packages
+- **Package removal** - Uninstall packages from system
+- **Source tracking** - Distinguish between official and AUR packages
+
+### 8. Configuration Storage
 - **YAML format** - Human-readable configuration
 - **Location**: `~/.config/filame/config.yaml`
 - **Auto-save** - Configuration saved after each change
 - **Serialization** - Kotlinx Serialization for type-safe config
 
-### 8. Error Handling
+### 9. Error Handling
 - **Result types** - Functional error handling with Result<T>
 - **Descriptive errors** - Clear error messages
 - **Graceful degradation** - Skip non-existent files
@@ -69,6 +79,7 @@
 2. **Config.kt** - Configuration data structures
    - FilameConfig data class
    - ConfigFile data class
+   - Package data class
    - ConfigManager singleton
    - Serialization support
 
@@ -77,6 +88,13 @@
    - Pull/Push operations
    - Commit handling
    - File export/import
+
+4. **PackageManager.kt** - Package management
+   - Paru installation and detection
+   - Package search (official + AUR)
+   - Package installation/removal
+   - System updates
+   - Installation status tracking
 
 ### Dependencies
 
@@ -107,6 +125,8 @@ Potential features for future versions:
 8. **Conflict Resolution** - Interactive merge conflict handling
 9. **Auto-sync** - Automatic periodic syncing
 10. **Webhooks** - Trigger sync on remote changes
+11. **Package Groups** - Organize packages into categories
+12. **Dependency Management** - Track package dependencies
 
 ## Platform Support
 
