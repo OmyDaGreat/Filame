@@ -11,10 +11,12 @@ class PackageManager(
     private val config: FilameConfig,
     private val repoDir: File = File(System.getProperty("user.home"), ".config/filame/repo"),
 ) {
+    private val isMockMode: Boolean = config.mockMode
     /**
      * Check if paru is installed
      */
     fun isParuInstalled(): Boolean {
+        if (isMockMode) return true // In mock mode, assume paru is available
         return try {
             val process = Runtime.getRuntime().exec("which paru")
             process.waitFor() == 0
@@ -27,6 +29,11 @@ class PackageManager(
      * Install paru AUR helper
      */
     fun installParu(): Result<Unit> {
+        if (isMockMode) {
+            println("[MOCK] Would install paru AUR helper")
+            return Result.success(Unit)
+        }
+        
         return try {
             if (isParuInstalled()) {
                 return Result.success(Unit)
@@ -157,6 +164,7 @@ class PackageManager(
      * Check if a package is installed
      */
     fun isPackageInstalled(packageName: String): Boolean {
+        if (isMockMode) return false // In mock mode, packages are never "installed"
         return try {
             val process = Runtime.getRuntime().exec("pacman -Qq $packageName")
             process.waitFor() == 0
@@ -178,6 +186,11 @@ class PackageManager(
      * Install a package
      */
     fun installPackage(pkg: PackageBundle): Result<Unit> {
+        if (isMockMode) {
+            println("[MOCK] Would install package: ${pkg.name} from ${pkg.source}")
+            return Result.success(Unit)
+        }
+        
         return try {
             val command = if (pkg.source == "aur") {
                 if (!isParuInstalled()) {
@@ -283,6 +296,37 @@ class PackageManager(
     }
 
     /**
+     * Export package bundle metadata to repo as package.yaml
+     * This enables two-way sync of package configurations
+     */
+    fun exportPackageMetadata(bundle: PackageBundle): Result<String> {
+        return try {
+            // Determine the package directory name from config files or use the package name
+            val packageDirName = if (bundle.configFiles.isNotEmpty()) {
+                // Extract directory from first config file destination path
+                val firstDestPath = bundle.configFiles[0].destinationPath
+                firstDestPath.substringBefore("/")
+            } else {
+                bundle.name
+            }
+
+            val packageDir = File(repoDir, packageDirName)
+            packageDir.mkdirs()
+
+            val metadataFile = File(packageDir, "package.yaml")
+            val yaml = com.charleskorn.kaml.Yaml.default.encodeToString(
+                PackageBundle.serializer(),
+                bundle
+            )
+            metadataFile.writeText(yaml)
+
+            Result.success(metadataFile.relativeTo(repoDir).path)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Scan repository directory for package bundles
      * Looks for directories with package metadata and config files
      */
@@ -347,6 +391,11 @@ class PackageManager(
      * Update all installed packages
      */
     fun updatePackages(): Result<Unit> {
+        if (isMockMode) {
+            println("[MOCK] Would update all packages")
+            return Result.success(Unit)
+        }
+        
         return try {
             // Update official packages
             val pacmanProcess = ProcessBuilder("sudo", "pacman", "-Syu", "--noconfirm")
@@ -380,6 +429,11 @@ class PackageManager(
      * Remove a package
      */
     fun removePackage(packageName: String): Result<Unit> {
+        if (isMockMode) {
+            println("[MOCK] Would remove package: $packageName")
+            return Result.success(Unit)
+        }
+        
         return try {
             val process = ProcessBuilder("sudo", "pacman", "-R", "--noconfirm", packageName)
                 .redirectOutput(ProcessBuilder.Redirect.INHERIT)

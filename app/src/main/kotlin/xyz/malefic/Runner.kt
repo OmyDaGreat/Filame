@@ -26,7 +26,17 @@ fun main(vararg args: String) {
     }
 
     ConfigManager.ensureConfigDir()
-    val config = loadOrCreateConfig()
+    var config = loadOrCreateConfig()
+    
+    // Auto-detect non-Linux systems and enable mock mode
+    val osName = System.getProperty("os.name").lowercase()
+    val isLinux = osName.contains("linux")
+    
+    if (!isLinux && !config.mockMode) {
+        println("Non-Linux system detected. Enabling mock mode for package operations.")
+        config = config.copy(mockMode = true)
+        saveConfig(config)
+    }
 
     showMainMenu(config)
 }
@@ -93,6 +103,9 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 textLine("Current device: ${config.deviceName.ifEmpty { "Not set" }}")
                 textLine("GitHub repo: ${config.githubRepo.ifEmpty { "Not set" }}")
                 textLine("Package bundles: ${config.packageBundles.size}")
+                if (config.mockMode) {
+                    yellow { textLine("Mode: MOCK (package operations simulated)") }
+                }
                 textLine()
 
                 arrayListOf(
@@ -204,10 +217,19 @@ fun configureSettings(config: FilameConfig): FilameConfig {
     print("Enter GitHub repository URL (current: ${config.githubRepo}): ")
     val githubRepo = scanner.nextLine().ifEmpty { config.githubRepo }
 
+    print("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ")
+    val mockModeInput = scanner.nextLine().lowercase()
+    val mockMode = when {
+        mockModeInput == "y" -> true
+        mockModeInput == "n" -> false
+        else -> config.mockMode
+    }
+
     val newConfig =
         config.copy(
             deviceName = deviceName,
             githubRepo = githubRepo,
+            mockMode = mockMode,
         )
 
     saveConfig(newConfig)
@@ -215,6 +237,9 @@ fun configureSettings(config: FilameConfig): FilameConfig {
     session {
         section {
             green { textLine("✓ Settings saved successfully!") }
+            if (mockMode) {
+                yellow { textLine("⚠ Mock mode enabled - package operations will be simulated") }
+            }
         }.run()
     }
 
@@ -405,10 +430,43 @@ fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
     val newConfig = config.copy(packageBundles = newBundles)
     saveConfig(newConfig)
 
-    session {
-        section {
-            green { textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!") }
-        }.run()
+    // Export package metadata to repo if GitHub repo is configured
+    if (newConfig.githubRepo.isNotEmpty()) {
+        val gitManager = GitManager(newConfig)
+        val gitResult = gitManager.initializeRepo()
+        
+        if (gitResult.isSuccess) {
+            val packageManager = PackageManager(newConfig)
+            val exportResult = packageManager.exportPackageMetadata(bundle)
+            
+            if (exportResult.isSuccess) {
+                session {
+                    section {
+                        green { textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!") }
+                        cyan { textLine("✓ Package metadata exported to repo: ${exportResult.getOrNull()}") }
+                    }.run()
+                }
+            } else {
+                session {
+                    section {
+                        green { textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!") }
+                        yellow { textLine("⚠ Could not export metadata to repo: ${exportResult.exceptionOrNull()?.message}") }
+                    }.run()
+                }
+            }
+        } else {
+            session {
+                section {
+                    green { textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!") }
+                }.run()
+            }
+        }
+    } else {
+        session {
+            section {
+                green { textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!") }
+            }.run()
+        }
     }
 
     return newConfig
@@ -661,17 +719,26 @@ fun exportPackageConfigs(config: FilameConfig) {
 
     val packageManager = PackageManager(config)
     var totalExported = 0
+    var metadataExported = 0
 
     for (bundle in config.packageBundles) {
+        // Export config files
         val exportResult = packageManager.exportPackageConfig(bundle)
         if (exportResult.isSuccess) {
             totalExported += exportResult.getOrNull()?.size ?: 0
+        }
+        
+        // Export package metadata
+        val metadataResult = packageManager.exportPackageMetadata(bundle)
+        if (metadataResult.isSuccess) {
+            metadataExported++
         }
     }
 
     session {
         section {
             green { textLine("✓ Exported $totalExported configuration file(s)") }
+            cyan { textLine("✓ Exported metadata for $metadataExported package bundle(s)") }
         }.run()
     }
 }
