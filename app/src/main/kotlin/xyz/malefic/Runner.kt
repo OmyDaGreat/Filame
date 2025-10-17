@@ -220,6 +220,13 @@ fun showMainMenuNonInteractive(initialConfig: FilameConfig) {
         println()
 
         val choice = readInput("Enter your choice: ")
+        
+        // Handle EOF gracefully
+        if (choice.isEmpty() && !isInteractive()) {
+            println("Thanks for using Filame! Goodbye!")
+            running = false
+            continue
+        }
 
         when (choice) {
             "1" -> config = configureSettings(config)
@@ -379,7 +386,7 @@ fun configureSettings(config: FilameConfig): FilameConfig {
 
     val githubRepo = readInput("Enter GitHub repository URL (current: ${config.githubRepo}): ").ifEmpty { config.githubRepo }
 
-    val mockModeInput = readInput("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ").lowercase()
+    val mockModeInput = readInput("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ", Completions("y", "n", "yes", "no")).lowercase()
     val mockMode =
         when (mockModeInput) {
             "y" -> true
@@ -553,12 +560,14 @@ fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
         return config
     }
 
-    val source = readInput("Enter source (official/aur) [official]: ").ifEmpty { "official" }
+    val sourceCompletions = Completions("official", "aur")
+    val source = readInput("Enter source (official/aur) [official]: ", sourceCompletions).ifEmpty { "official" }
 
     val description = readInput("Enter description (optional): ")
 
     // Ask if user wants to add config files
-    val addConfigs = readInput("Add configuration files? (y/n) [n]: ").lowercase() == "y"
+    val yesNoCompletions = Completions("y", "n", "yes", "no")
+    val addConfigs = readInput("Add configuration files? (y/n) [n]: ", yesNoCompletions).lowercase() == "y"
 
     val configFiles = mutableListOf<ConfigFile>()
     if (addConfigs) {
@@ -681,7 +690,7 @@ fun installPackageWithConfig(config: FilameConfig) {
             }.run()
         }
 
-        if (readInput("Install paru now? (y/n): ").lowercase() == "y") {
+        if (readInput("Install paru now? (y/n): ", Completions("y", "n", "yes", "no")).lowercase() == "y") {
             println("Installing paru...")
             val paruResult = packageManager.installParu()
             if (paruResult.isFailure) {
@@ -767,7 +776,7 @@ fun installAllMissingPackages(config: FilameConfig) {
             }.run()
         }
 
-        if (readInput("Install paru now? (y/n): ").lowercase() == "y") {
+        if (readInput("Install paru now? (y/n): ", Completions("y", "n", "yes", "no")).lowercase() == "y") {
             println("Installing paru...")
             val paruResult = packageManager.installParu()
             if (paruResult.isFailure) {
