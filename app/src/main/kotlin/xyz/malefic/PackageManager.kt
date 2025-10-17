@@ -1,5 +1,6 @@
 package xyz.malefic
 
+import com.charleskorn.kaml.Yaml
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -314,7 +315,7 @@ class PackageManager(
             packageDir.mkdirs()
 
             val metadataFile = File(packageDir, "package.yaml")
-            val yaml = com.charleskorn.kaml.Yaml.default.encodeToString(
+            val yaml = Yaml.default.encodeToString(
                 PackageBundle.serializer(),
                 bundle
             )
@@ -346,7 +347,7 @@ class PackageManager(
                     // Parse package metadata
                     try {
                         val yaml = metadataFile.readText()
-                        val bundle = com.charleskorn.kaml.Yaml.default.decodeFromString(
+                        val bundle = Yaml.default.decodeFromString(
                             PackageBundle.serializer(),
                             yaml
                         )
@@ -360,8 +361,9 @@ class PackageManager(
                         .filter { it.isFile && !it.name.startsWith(".") }
                         .map { file ->
                             val relativePath = file.relativeTo(packageDir).path
+                            val userHome = System.getProperty("user.home")
                             ConfigFile(
-                                sourcePath = "/home/${System.getProperty("user.name")}/.config/${packageDir.name}/$relativePath",
+                                sourcePath = "$userHome/.config/${packageDir.name}/$relativePath",
                                 destinationPath = "${packageDir.name}/$relativePath",
                                 description = ""
                             )
