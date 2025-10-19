@@ -1,3 +1,31 @@
+/*
+ * Filame - Arch Linux Configuration Manager
+ *
+ * KOTTER UI FRAMEWORK ARCHITECTURE:
+ * 
+ * This application uses Kotter for terminal UI rendering. The architecture follows these patterns:
+ * 
+ * 1. SESSION LIFECYCLE:
+ *    - One top-level session block in main() establishes the terminal runtime
+ *    - This session persists for the entire application lifecycle
+ *    - Nested sessions exist in utility functions due to Kotlin receiver limitations
+ * 
+ * 2. RENDER PURITY:
+ *    - All section {} blocks contain only pure render logic
+ *    - No side effects, state mutations, or timer creation during render
+ * 
+ * 3. REACTIVE STATE:
+ *    - liveVarOf used for small reactive UI flags (e.g., exit, choice)
+ *    - Changes to liveVarOf variables automatically trigger re-renders
+ * 
+ * 4. LIFECYCLE MANAGEMENT:
+ *    - Interactive loops use section.runUntilKeyPressed() with proper lifecycle initialization
+ *    - Event handlers (onKeyPressed, onInputEntered) placed in lifecycle blocks, not render blocks
+ * 
+ * 5. FUTURE IMPROVEMENTS:
+ *    - Convert utility functions to extension functions on Session scope to eliminate nested sessions
+ *    - Example: fun Session.showMainMenu(config: FilameConfig) { ... }
+ */
 package xyz.malefic
 
 import com.charleskorn.kaml.Yaml
