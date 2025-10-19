@@ -109,81 +109,10 @@ class PackageManagerTest {
     }
 
     @Test
-    fun testMockModeDefaultValue() {
-        val config = FilameConfig(
-            deviceName = "test-device",
-            githubRepo = "https://github.com/test/repo.git"
-        )
-        
-        assertEquals(false, config.mockMode)
-    }
-
-    @Test
-    fun testMockModeEnabled() {
-        val config = FilameConfig(
-            deviceName = "test-device",
-            githubRepo = "https://github.com/test/repo.git",
-            mockMode = true
-        )
-        
-        assertTrue(config.mockMode)
-    }
-
-    @Test
-    fun testPackageManagerWithMockMode() {
-        val config = FilameConfig(
-            deviceName = "test-device",
-            githubRepo = "https://github.com/test/repo.git",
-            packageBundles = listOf(
-                PackageBundle("vim", "official", "Text editor")
-            ),
-            mockMode = true
-        )
-        
-        val packageManager = PackageManager(config)
-        assertNotNull(packageManager)
-        
-        // In mock mode, paru is always considered installed
-        assertTrue(packageManager.isParuInstalled())
-    }
-
-    @Test
-    fun testInstallPackageInMockMode() {
-        val config = FilameConfig(
-            deviceName = "test-device",
-            githubRepo = "https://github.com/test/repo.git",
-            mockMode = true
-        )
-        
-        val packageManager = PackageManager(config)
-        val bundle = PackageBundle("vim", "official", "Text editor")
-        
-        // In mock mode, installation should succeed without errors
-        val result = packageManager.installPackage(bundle)
-        assertTrue(result.isSuccess)
-    }
-
-    @Test
-    fun testInstallParuInMockMode() {
-        val config = FilameConfig(
-            deviceName = "test-device",
-            githubRepo = "https://github.com/test/repo.git",
-            mockMode = true
-        )
-        
-        val packageManager = PackageManager(config)
-        
-        // In mock mode, paru installation should succeed
-        val result = packageManager.installParu()
-        assertTrue(result.isSuccess)
-    }
-
-    @Test
     fun testExportPackageMetadata() {
         val config = FilameConfig(
             deviceName = "test-device",
-            githubRepo = "https://github.com/test/repo.git",
-            mockMode = true
+            githubRepo = "https://github.com/test/repo.git"
         )
         
         val bundle = PackageBundle(
