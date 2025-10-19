@@ -22,21 +22,25 @@ import com.varabyte.kotter.foundation.text.yellow
 /**
  * Filame - File manager for Arch Linux configurations
  * Manages configuration files across multiple devices with GitHub integration
+ *
+ * Session lifecycle: The entire application runs within a single top-level session block.
+ * This establishes the terminal runtime once and maintains it throughout the app lifecycle.
  */
 fun main(vararg args: String) {
-    if (args.isNotEmpty() && args[0] == "hello") {
-        session {
+    // Single top-level session for the entire application
+    session {
+        if (args.isNotEmpty() && args[0] == "hello") {
             section {
                 textLine("Hello World!")
             }.run()
+            return@session
         }
-        return
+
+        ConfigManager.ensureConfigDir()
+        val config = loadOrCreateConfig()
+
+        showMainMenu(config)
     }
-
-    ConfigManager.ensureConfigDir()
-    val config = loadOrCreateConfig()
-
-    showMainMenu(config)
 }
 
 /**
@@ -46,6 +50,10 @@ private val yesNoCompletions: Completions = Completions("y", "n", "yes", "no")
 
 /**
  * Display a colored header using Kotter
+ *
+ * Note: This function creates a nested session block. While this works, it's not the ideal pattern.
+ * In a future refactor, this should be converted to an extension function on Session scope to
+ * avoid the nested session overhead.
  */
 private fun displayHeader(text: String) {
     session {
@@ -58,6 +66,9 @@ private fun displayHeader(text: String) {
 
 /**
  * Read a line of input using Kotter
+ *
+ * Note: This function creates a nested session block for its interactive input loop.
+ * While functional, a future refactor could make this an extension function on Session scope.
  */
 private fun readInput(prompt: String = "", completions: Completions? = null): String {
     var result = ""
@@ -82,6 +93,9 @@ private fun readInput(prompt: String = "", completions: Completions? = null): St
 
 /**
  * Read multi-line input using Kotter
+ *
+ * Note: This function creates a nested session block for its interactive input loop.
+ * While functional, a future refactor could make this an extension function on Session scope.
  */
 private fun readMultiLineInput(prompt: String = ""): String {
     var result = ""
