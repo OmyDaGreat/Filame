@@ -18,7 +18,6 @@ data class FilameConfig(
             ".cache/*",
             "*.lock",
         ),
-    val mockMode: Boolean = false, // Enable mock mode for non-Linux environments
 )
 
 /**

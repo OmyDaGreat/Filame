@@ -1,8 +1,13 @@
 package xyz.malefic
 
 import com.charleskorn.kaml.Yaml
+import com.varabyte.kotter.foundation.input.Completions
 import com.varabyte.kotter.foundation.input.Keys
+import com.varabyte.kotter.foundation.input.input
+import com.varabyte.kotter.foundation.input.multilineInput
+import com.varabyte.kotter.foundation.input.onInputEntered
 import com.varabyte.kotter.foundation.input.onKeyPressed
+import com.varabyte.kotter.foundation.input.runUntilInputEntered
 import com.varabyte.kotter.foundation.input.runUntilKeyPressed
 import com.varabyte.kotter.foundation.liveVarOf
 import com.varabyte.kotter.foundation.session
@@ -13,7 +18,6 @@ import com.varabyte.kotter.foundation.text.text
 import com.varabyte.kotter.foundation.text.textLine
 import com.varabyte.kotter.foundation.text.white
 import com.varabyte.kotter.foundation.text.yellow
-import java.util.Scanner
 
 /**
  * Filame - File manager for Arch Linux configurations
@@ -21,27 +25,80 @@ import java.util.Scanner
  */
 fun main(vararg args: String) {
     if (args.isNotEmpty() && args[0] == "hello") {
-        println("Hello World!")
+        session {
+            section {
+                textLine("Hello World!")
+            }.run()
+        }
         return
     }
 
     ConfigManager.ensureConfigDir()
-    var config = loadOrCreateConfig()
-
-    // Auto-detect non-Linux systems and enable mock mode
-    val osName = System.getProperty("os.name").lowercase()
-    val isLinux = osName.contains("linux")
-
-    if (!isLinux && !config.mockMode) {
-        println("Non-Linux system detected. Enabling mock mode for package operations.")
-        config = config.copy(mockMode = true)
-        saveConfig(config)
-    }
+    val config = loadOrCreateConfig()
 
     showMainMenu(config)
 }
 
-private val scanner = Scanner(System.`in`)
+/**
+ * Common completions for yes/no prompts
+ */
+private val yesNoCompletions: Completions = Completions("y", "n", "yes", "no")
+
+/**
+ * Display a colored header using Kotter
+ */
+private fun displayHeader(text: String) {
+    session {
+        section {
+            cyan { textLine(text) }
+            textLine()
+        }.run()
+    }
+}
+
+/**
+ * Read a line of input using Kotter
+ */
+private fun readInput(prompt: String = "", completions: Completions? = null): String {
+    var result = ""
+    session {
+        section {
+            if (prompt.isNotEmpty()) {
+                text(prompt)
+            }
+            if (completions != null) {
+                input(completions)
+            } else {
+                input()
+            }
+        }.runUntilInputEntered {
+            onInputEntered {
+                result = input
+            }
+        }
+    }
+    return result
+}
+
+/**
+ * Read multi-line input using Kotter
+ */
+private fun readMultiLineInput(prompt: String = ""): String {
+    var result = ""
+    session {
+        section {
+            if (prompt.isNotEmpty()) {
+                textLine(prompt)
+            }
+            multilineInput()
+        }.runUntilInputEntered {
+            onInputEntered {
+                result = input
+            }
+        }
+    }
+    return result
+}
 
 /**
  * Load existing config or create a new one
@@ -54,7 +111,11 @@ fun loadOrCreateConfig(): FilameConfig {
             val yaml = configFile.readText()
             Yaml.default.decodeFromString(FilameConfig.serializer(), yaml)
         } catch (e: Exception) {
-            println("Error loading config: ${e.message}")
+            session {
+                section {
+                    red { textLine("Error loading config: ${e.message}") }
+                }.run()
+            }
             FilameConfig()
         }
     } else {
@@ -69,9 +130,17 @@ fun saveConfig(config: FilameConfig) {
     try {
         val yaml = Yaml.default.encodeToString(FilameConfig.serializer(), config)
         ConfigManager.getConfigFile().writeText(yaml)
-        println("Configuration saved successfully!")
+        session {
+            section {
+                green { textLine("Configuration saved successfully!") }
+            }.run()
+        }
     } catch (e: Exception) {
-        println("Error saving config: ${e.message}")
+        session {
+            section {
+                red { textLine("Error saving config: ${e.message}") }
+            }.run()
+        }
     }
 }
 
@@ -104,9 +173,6 @@ fun showMainMenu(initialConfig: FilameConfig) {
                 textLine("Current device: ${config.deviceName.ifEmpty { "Not set" }}")
                 textLine("GitHub repo: ${config.githubRepo.ifEmpty { "Not set" }}")
                 textLine("Package bundles: ${config.packageBundles.size}")
-                if (config.mockMode) {
-                    yellow { textLine("Mode: MOCK (package operations simulated)") }
-                }
                 textLine()
 
                 textLine("Select an option: ")
@@ -202,45 +268,19 @@ fun showMainMenu(initialConfig: FilameConfig) {
  * Configure basic settings
  */
 fun configureSettings(config: FilameConfig): FilameConfig {
-    session {
-        section {
-            cyan { textLine("═══ Configure Settings ═══") }
-            textLine()
-        }.run()
-    }
+    displayHeader("═══ Configure Settings ═══")
 
-    print("Enter device name (current: ${config.deviceName}): ")
-    val deviceName = scanner.nextLine().ifEmpty { config.deviceName }
+    val deviceName = readInput("Enter device name (current: ${config.deviceName}): ").ifEmpty { config.deviceName }
 
-    print("Enter GitHub repository URL (current: ${config.githubRepo}): ")
-    val githubRepo = scanner.nextLine().ifEmpty { config.githubRepo }
-
-    print("Enable mock mode for non-Linux environments? (y/n) [current: ${if (config.mockMode) "y" else "n"}]: ")
-    val mockModeInput = scanner.nextLine().lowercase()
-    val mockMode =
-        when (mockModeInput) {
-            "y" -> true
-            "n" -> false
-            else -> config.mockMode
-        }
+    val githubRepo = readInput("Enter GitHub repository URL (current: ${config.githubRepo}): ").ifEmpty { config.githubRepo }
 
     val newConfig =
         config.copy(
             deviceName = deviceName,
             githubRepo = githubRepo,
-            mockMode = mockMode,
         )
 
     saveConfig(newConfig)
-
-    session {
-        section {
-            green { textLine("✓ Settings saved successfully!") }
-            if (mockMode) {
-                yellow { textLine("⚠ Mock mode enabled - package operations will be simulated") }
-            }
-        }.run()
-    }
 
     return newConfig
 }
@@ -277,7 +317,11 @@ fun scanRepoForPackages(config: FilameConfig): FilameConfig {
         return config
     }
 
-    println("Scanning repository for package bundles...")
+    session {
+        section {
+            textLine("Scanning repository for package bundles...")
+        }.run()
+    }
 
     val packageManager = PackageManager(config)
     val scanResult = packageManager.scanRepoForPackages()
@@ -366,15 +410,9 @@ fun listPackageBundles(config: FilameConfig) {
  * Add or edit a package bundle
  */
 fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
-    session {
-        section {
-            cyan { textLine("═══ Add/Edit Package Bundle ═══") }
-            textLine()
-        }.run()
-    }
+    displayHeader("═══ Add/Edit Package Bundle ═══")
 
-    print("Enter package name: ")
-    val name = scanner.nextLine()
+    val name = readInput("Enter package name: ")
 
     if (name.isEmpty()) {
         session {
@@ -385,30 +423,24 @@ fun addOrEditPackageBundle(config: FilameConfig): FilameConfig {
         return config
     }
 
-    print("Enter source (official/aur) [official]: ")
-    val source = scanner.nextLine().ifEmpty { "official" }
+    val source = readInput("Enter source (official/aur) [official]: ", Completions("official", "aur")).ifEmpty { "official" }
 
-    print("Enter description (optional): ")
-    val description = scanner.nextLine()
+    val description = readInput("Enter description (optional): ")
 
     // Ask if user wants to add config files
-    print("Add configuration files? (y/n) [n]: ")
-    val addConfigs = scanner.nextLine().lowercase() == "y"
+    val addConfigs = readInput("Add configuration files? (y/n) [n]: ", yesNoCompletions).lowercase() == "y"
 
     val configFiles = mutableListOf<ConfigFile>()
     if (addConfigs) {
         var adding = true
         while (adding) {
-            print("Enter source path (or press Enter to finish): ")
-            val sourcePath = scanner.nextLine()
+            val sourcePath = readInput("Enter source path (or press Enter to finish): ")
             if (sourcePath.isEmpty()) {
                 adding = false
             } else {
-                print("Enter destination path in repo: ")
-                val destPath = scanner.nextLine()
+                val destPath = readInput("Enter destination path in repo: ")
                 if (destPath.isNotEmpty()) {
-                    print("Enter description (optional): ")
-                    val fileDesc = scanner.nextLine()
+                    val fileDesc = readInput("Enter description (optional): ")
                     val expandedPath = sourcePath.replace("~", System.getProperty("user.home"))
                     configFiles.add(ConfigFile(expandedPath, destPath, fileDesc))
                 }
@@ -493,12 +525,15 @@ fun installPackageWithConfig(config: FilameConfig) {
     }
 
     // Show available packages
-    config.packageBundles.forEachIndexed { index, bundle ->
-        println("${index + 1}. ${bundle.name} (${bundle.source})")
+    session {
+        section {
+            config.packageBundles.forEachIndexed { index, bundle ->
+                textLine("${index + 1}. ${bundle.name} (${bundle.source})")
+            }
+        }.run()
     }
 
-    print("\nEnter package number to install: ")
-    val index = scanner.nextLine().toIntOrNull()?.minus(1)
+    val index = readInput("\nEnter package number to install: ").toIntOrNull()?.minus(1)
 
     if (index == null || index !in config.packageBundles.indices) {
         session {
@@ -517,12 +552,15 @@ fun installPackageWithConfig(config: FilameConfig) {
         session {
             section {
                 yellow { textLine("Paru is required for AUR packages but not installed.") }
-                text("Install paru now? (y/n): ")
             }.run()
         }
 
-        if (scanner.nextLine().lowercase() == "y") {
-            println("Installing paru...")
+        if (readInput("Install paru now? (y/n): ", yesNoCompletions).lowercase() == "y") {
+            session {
+                section {
+                    textLine("Installing paru...")
+                }.run()
+            }
             val paruResult = packageManager.installParu()
             if (paruResult.isFailure) {
                 session {
@@ -538,7 +576,11 @@ fun installPackageWithConfig(config: FilameConfig) {
     }
 
     // Install the package
-    println("Installing ${bundle.name}...")
+    session {
+        section {
+            textLine("Installing ${bundle.name}...")
+        }.run()
+    }
     val installResult = packageManager.installPackage(bundle)
 
     if (installResult.isFailure) {
@@ -552,7 +594,11 @@ fun installPackageWithConfig(config: FilameConfig) {
 
     // Apply configuration
     if (bundle.configFiles.isNotEmpty()) {
-        println("Applying configuration files...")
+        session {
+            section {
+                textLine("Applying configuration files...")
+            }.run()
+        }
         val applyResult = packageManager.applyPackageConfig(bundle)
 
         if (applyResult.isSuccess) {
@@ -604,12 +650,15 @@ fun installAllMissingPackages(config: FilameConfig) {
         session {
             section {
                 yellow { textLine("Paru is required for AUR packages but not installed.") }
-                text("Install paru now? (y/n): ")
             }.run()
         }
 
-        if (scanner.nextLine().lowercase() == "y") {
-            println("Installing paru...")
+        if (readInput("Install paru now? (y/n): ", yesNoCompletions).lowercase() == "y") {
+            session {
+                section {
+                    textLine("Installing paru...")
+                }.run()
+            }
             val paruResult = packageManager.installParu()
             if (paruResult.isFailure) {
                 session {
@@ -624,7 +673,11 @@ fun installAllMissingPackages(config: FilameConfig) {
         }
     }
 
-    println("Installing missing packages...")
+    session {
+        section {
+            textLine("Installing missing packages...")
+        }.run()
+    }
     val result = packageManager.installMissingPackages()
 
     if (result.isSuccess) {
@@ -664,7 +717,11 @@ fun updateAllPackages(config: FilameConfig) {
     }
 
     val packageManager = PackageManager(config)
-    println("Updating all packages... This may take a while.")
+    session {
+        section {
+            textLine("Updating all packages... This may take a while.")
+        }.run()
+    }
 
     val result = packageManager.updatePackages()
 
@@ -715,7 +772,11 @@ fun exportPackageConfigs(config: FilameConfig) {
         return
     }
 
-    println("Exporting package configurations...")
+    session {
+        section {
+            textLine("Exporting package configurations...")
+        }.run()
+    }
 
     val packageManager = PackageManager(config)
     var totalExported = 0
@@ -759,19 +820,17 @@ fun syncWithGitHub(config: FilameConfig): FilameConfig {
                 green { textLine("2. Push changes to GitHub") }
                 cyan { textLine("3. Back to main menu") }
                 textLine()
-                text("Select an option: ")
             }.run()
         }
 
-        when (scanner.nextLine()) {
+        when (readInput("Select an option: ")) {
             "1" -> currentConfig = syncPull(currentConfig)
             "2" -> syncPush(currentConfig)
             "3" -> syncing = false
         }
 
         if (syncing) {
-            println("\nPress Enter to continue...")
-            scanner.nextLine()
+            readInput("\nPress Enter to continue...")
         }
     }
 
@@ -812,7 +871,11 @@ fun syncPull(config: FilameConfig): FilameConfig {
 
     val git = gitResult.getOrNull()!!
 
-    println("Pulling latest changes from GitHub...")
+    session {
+        section {
+            textLine("Pulling latest changes from GitHub...")
+        }.run()
+    }
 
     val pullResult = gitManager.pull(git)
 
@@ -869,10 +932,13 @@ fun syncPush(config: FilameConfig) {
 
     val git = gitResult.getOrNull()!!
 
-    print("Enter commit message: ")
-    val message = scanner.nextLine().ifEmpty { "Update configs from ${config.deviceName}" }
+    val message = readInput("Enter commit message: ").ifEmpty { "Update configs from ${config.deviceName}" }
 
-    println("Committing changes...")
+    session {
+        section {
+            textLine("Committing changes...")
+        }.run()
+    }
 
     val commitResult = gitManager.commit(git, message)
 
@@ -886,10 +952,9 @@ fun syncPush(config: FilameConfig) {
         return
     }
 
-    println("Pushing to GitHub...")
-
     session {
         section {
+            textLine("Pushing to GitHub...")
             yellow { textLine("Note: You may need to configure Git credentials for push") }
         }.run()
     }
