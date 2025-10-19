@@ -160,6 +160,10 @@ fun saveConfig(config: FilameConfig) {
 
 /**
  * Main menu for the application
+ *
+ * Note: This function creates its own session block because Kotlin doesn't automatically
+ * pass implicit session receivers through function calls. To avoid this nested session,
+ * this function would need to be refactored as an extension function on Session scope.
  */
 fun showMainMenu(initialConfig: FilameConfig) {
     var config = initialConfig
