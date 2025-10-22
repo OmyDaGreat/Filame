@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     application
     kotlin("plugin.serialization") version "2.2.20"
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 repositories {
@@ -32,4 +33,11 @@ java {
 
 application {
     mainClass = "xyz.malefic.RunnerKt"
+}
+
+tasks.shadowJar {
+    archiveBaseName.set("filame")
+    archiveClassifier.set("")
+    archiveVersion.set("")
+    mergeServiceFiles()
 }

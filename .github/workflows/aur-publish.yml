@@ -1,0 +1,246 @@
+name: Build and Publish to AUR
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Determine Version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Get the latest tag or default to 0.1.0 if no tags exist
+            git fetch --tags
+            latest_tag=$(git tag -l "v*" | sort -V | tail -n 1)
+            
+            if [ -z "$latest_tag" ]; then
+              latest_version="0.1.0"
+            else
+              latest_version="${latest_tag#v}"
+            fi
+            
+            # Split version into major, minor, patch
+            IFS='.' read -r major minor patch <<< "$latest_version"
+            
+            # Bump version based on input
+            bump_type="${{ github.event.inputs.version_bump }}"
+            
+            if [ "$bump_type" == "major" ]; then
+              major=$((major + 1))
+              minor=0
+              patch=0
+            elif [ "$bump_type" == "minor" ]; then
+              minor=$((minor + 1))
+              patch=0
+            else
+              patch=$((patch + 1))
+            fi
+            
+            new_version="$major.$minor.$patch"
+            echo "version=$new_version" >> $GITHUB_OUTPUT
+            echo "tag=v$new_version" >> $GITHUB_OUTPUT
+          else
+            # Extract version from tag
+            tag_name="${GITHUB_REF#refs/tags/}"
+            version="${tag_name#v}"
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "tag=$tag_name" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Build Shadow JAR
+        run: ./gradlew shadowJar --no-daemon
+
+      - name: Calculate SHA256 for source tarball
+        id: sha
+        run: |
+          # Download the source tarball that will be used by AUR
+          wget -q "https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.tag }}.tar.gz" -O filame-${{ steps.version.outputs.version }}.tar.gz
+          checksum=$(sha256sum filame-${{ steps.version.outputs.version }}.tar.gz | awk '{print $1}')
+          echo "sha256=$checksum" >> $GITHUB_OUTPUT
+          rm filame-${{ steps.version.outputs.version }}.tar.gz
+
+      - name: Update PKGBUILD version
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('${{ steps.sha.outputs.sha256 }}')/" PKGBUILD
+
+      - name: Generate .SRCINFO
+        run: |
+          cat > .SRCINFO << EOF
+          pkgbase = filame
+          	pkgdesc = A powerful terminal tool for managing Arch Linux configurations across multiple devices
+          	pkgver = ${{ steps.version.outputs.version }}
+          	pkgrel = 1
+          	url = https://github.com/${{ github.repository }}
+          	arch = any
+          	license = MIT
+          	makedepends = gradle
+          	makedepends = git
+          	depends = java-runtime>=21
+          	source = filame-${{ steps.version.outputs.version }}.tar.gz::https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.tag }}.tar.gz
+          	sha256sums = ${{ steps.sha.outputs.sha256 }}
+
+          pkgname = filame
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            Release ${{ steps.version.outputs.version }}
+
+            ## Installation
+
+            ### From AUR
+            ```bash
+            yay -S filame
+            # or
+            paru -S filame
+            ```
+
+            ### Manual Installation
+            Download the JAR file and run with Java 21+:
+            ```bash
+            java -jar filame.jar
+            ```
+
+            ## Changes
+            See commit history for details.
+          draft: false
+          prerelease: false
+          files: |
+            app/build/libs/filame.jar
+            PKGBUILD
+            .SRCINFO
+
+  publish-aur:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Get the latest tag or default to 0.1.0 if no tags exist
+            git fetch --tags
+            latest_tag=$(git tag -l "v*" | sort -V | tail -n 1)
+            
+            if [ -z "$latest_tag" ]; then
+              latest_version="0.1.0"
+            else
+              latest_version="${latest_tag#v}"
+            fi
+            
+            # Split version into major, minor, patch
+            IFS='.' read -r major minor patch <<< "$latest_version"
+            
+            # Bump version based on input
+            bump_type="${{ github.event.inputs.version_bump }}"
+            
+            if [ "$bump_type" == "major" ]; then
+              major=$((major + 1))
+              minor=0
+              patch=0
+            elif [ "$bump_type" == "minor" ]; then
+              minor=$((minor + 1))
+              patch=0
+            else
+              patch=$((patch + 1))
+            fi
+            
+            new_version="$major.$minor.$patch"
+            echo "version=$new_version" >> $GITHUB_OUTPUT
+            echo "tag=v$new_version" >> $GITHUB_OUTPUT
+          else
+            # Extract version from tag
+            tag_name="${GITHUB_REF#refs/tags/}"
+            version="${tag_name#v}"
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "tag=$tag_name" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Calculate SHA256 for source tarball
+        id: sha
+        run: |
+          wget -q "https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.tag }}.tar.gz" -O filame-${{ steps.version.outputs.version }}.tar.gz
+          checksum=$(sha256sum filame-${{ steps.version.outputs.version }}.tar.gz | awk '{print $1}')
+          echo "sha256=$checksum" >> $GITHUB_OUTPUT
+
+      - name: Update PKGBUILD version
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('${{ steps.sha.outputs.sha256 }}')/" PKGBUILD
+
+      - name: Generate .SRCINFO
+        run: |
+          cat > .SRCINFO << EOF
+          pkgbase = filame
+          	pkgdesc = A powerful terminal tool for managing Arch Linux configurations across multiple devices
+          	pkgver = ${{ steps.version.outputs.version }}
+          	pkgrel = 1
+          	url = https://github.com/${{ github.repository }}
+          	arch = any
+          	license = MIT
+          	makedepends = gradle
+          	makedepends = git
+          	depends = java-runtime>=21
+          	source = filame-${{ steps.version.outputs.version }}.tar.gz::https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.tag }}.tar.gz
+          	sha256sums = ${{ steps.sha.outputs.sha256 }}
+
+          pkgname = filame
+          EOF
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v2.7.2
+        with:
+          pkgname: filame
+          pkgbuild: ./PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update to version ${{ steps.version.outputs.version }}
+          ssh_keyscan_types: rsa,dsa,ecdsa,ed25519
