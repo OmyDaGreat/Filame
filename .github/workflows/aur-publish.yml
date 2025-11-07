@@ -15,6 +15,11 @@ on:
           - patch
           - minor
           - major
+      custom_version:
+        description: 'Optional custom version to set (e.g. 1.2.3). If provided, this overrides bump logic.'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   build-and-release:
@@ -38,36 +43,44 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Get the latest tag or default to 0.1.0 if no tags exist
-            git fetch --tags
-            latest_tag=$(git tag -l "v*" | sort -V | tail -n 1)
-            
-            if [ -z "$latest_tag" ]; then
-              latest_version="0.1.0"
+            # If a custom version was provided via workflow_dispatch, use it (strip leading 'v' if present)
+            custom_version="${{ github.event.inputs.custom_version }}"
+            if [[ -n "$custom_version" ]]; then
+              custom_version="${custom_version#v}"
+              echo "version=$custom_version" >> $GITHUB_OUTPUT
+              echo "tag=v$custom_version" >> $GITHUB_OUTPUT
             else
-              latest_version="${latest_tag#v}"
+              # Get the latest tag or default to 0.1.0 if no tags exist
+              git fetch --tags
+              latest_tag=$(git tag -l "v*" | sort -V | tail -n 1)
+
+              if [ -z "$latest_tag" ]; then
+                latest_version="0.1.0"
+              else
+                latest_version="${latest_tag#v}"
+              fi
+
+              # Split version into major, minor, patch
+              IFS='.' read -r major minor patch <<< "$latest_version"
+
+              # Bump version based on input
+              bump_type="${{ github.event.inputs.version_bump }}"
+
+              if [ "$bump_type" == "major" ]; then
+                major=$((major + 1))
+                minor=0
+                patch=0
+              elif [ "$bump_type" == "minor" ]; then
+                minor=$((minor + 1))
+                patch=0
+              else
+                patch=$((patch + 1))
+              fi
+
+              new_version="$major.$minor.$patch"
+              echo "version=$new_version" >> $GITHUB_OUTPUT
+              echo "tag=v$new_version" >> $GITHUB_OUTPUT
             fi
-            
-            # Split version into major, minor, patch
-            IFS='.' read -r major minor patch <<< "$latest_version"
-            
-            # Bump version based on input
-            bump_type="${{ github.event.inputs.version_bump }}"
-            
-            if [ "$bump_type" == "major" ]; then
-              major=$((major + 1))
-              minor=0
-              patch=0
-            elif [ "$bump_type" == "minor" ]; then
-              minor=$((minor + 1))
-              patch=0
-            else
-              patch=$((patch + 1))
-            fi
-            
-            new_version="$major.$minor.$patch"
-            echo "version=$new_version" >> $GITHUB_OUTPUT
-            echo "tag=v$new_version" >> $GITHUB_OUTPUT
           else
             # Extract version from tag
             tag_name="${GITHUB_REF#refs/tags/}"
@@ -165,36 +178,44 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Get the latest tag or default to 0.1.0 if no tags exist
-            git fetch --tags
-            latest_tag=$(git tag -l "v*" | sort -V | tail -n 1)
-            
-            if [ -z "$latest_tag" ]; then
-              latest_version="0.1.0"
+            # If a custom version was provided via workflow_dispatch, use it (strip leading 'v' if present)
+            custom_version="${{ github.event.inputs.custom_version }}"
+            if [[ -n "$custom_version" ]]; then
+              custom_version="${custom_version#v}"
+              echo "version=$custom_version" >> $GITHUB_OUTPUT
+              echo "tag=v$custom_version" >> $GITHUB_OUTPUT
             else
-              latest_version="${latest_tag#v}"
+              # Get the latest tag or default to 0.1.0 if no tags exist
+              git fetch --tags
+              latest_tag=$(git tag -l "v*" | sort -V | tail -n 1)
+
+              if [ -z "$latest_tag" ]; then
+                latest_version="0.1.0"
+              else
+                latest_version="${latest_tag#v}"
+              fi
+
+              # Split version into major, minor, patch
+              IFS='.' read -r major minor patch <<< "$latest_version"
+
+              # Bump version based on input
+              bump_type="${{ github.event.inputs.version_bump }}"
+
+              if [ "$bump_type" == "major" ]; then
+                major=$((major + 1))
+                minor=0
+                patch=0
+              elif [ "$bump_type" == "minor" ]; then
+                minor=$((minor + 1))
+                patch=0
+              else
+                patch=$((patch + 1))
+              fi
+
+              new_version="$major.$minor.$patch"
+              echo "version=$new_version" >> $GITHUB_OUTPUT
+              echo "tag=v$new_version" >> $GITHUB_OUTPUT
             fi
-            
-            # Split version into major, minor, patch
-            IFS='.' read -r major minor patch <<< "$latest_version"
-            
-            # Bump version based on input
-            bump_type="${{ github.event.inputs.version_bump }}"
-            
-            if [ "$bump_type" == "major" ]; then
-              major=$((major + 1))
-              minor=0
-              patch=0
-            elif [ "$bump_type" == "minor" ]; then
-              minor=$((minor + 1))
-              patch=0
-            else
-              patch=$((patch + 1))
-            fi
-            
-            new_version="$major.$minor.$patch"
-            echo "version=$new_version" >> $GITHUB_OUTPUT
-            echo "tag=v$new_version" >> $GITHUB_OUTPUT
           else
             # Extract version from tag
             tag_name="${GITHUB_REF#refs/tags/}"
