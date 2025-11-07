@@ -1,6 +1,7 @@
 package xyz.malefic
 
 import com.charleskorn.kaml.Yaml
+import xyz.malefic.ConfigManager.configFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -19,13 +20,14 @@ class ConfigTest {
                             name = "i3",
                             source = "official",
                             description = "i3 window manager",
-                            configFiles = listOf(
-                                ConfigFile(
-                                    sourcePath = "/home/user/.config/i3/config",
-                                    destinationPath = "i3/config",
-                                    description = "i3 window manager config",
+                            configFiles =
+                                listOf(
+                                    ConfigFile(
+                                        sourcePath = "/home/user/.config/i3/config",
+                                        destinationPath = "i3/config",
+                                        description = "i3 window manager config",
+                                    ),
                                 ),
-                            )
                         ),
                     ),
                 ignorePatterns = listOf("*.log", "*.tmp"),
@@ -91,7 +93,6 @@ class ConfigTest {
     @Test
     fun testConfigManagerPaths() {
         ConfigManager.ensureConfigDir()
-        val configFile = ConfigManager.getConfigFile()
         assertNotNull(configFile)
         assertTrue(configFile.path.contains(".config/filame"))
     }

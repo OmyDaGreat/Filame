@@ -5,6 +5,7 @@ serialization = "1.9.0"
 kaml = "0.102.0"
 coroutines = "1.10.2"
 kotlin = "2.2.21"
+arrow = "2.2.0"
 
 [libraries]
 kotter = { module = "com.varabyte.kotter:kotter", version.ref = "kotter" }
@@ -12,6 +13,11 @@ jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 kaml = { module = "com.charleskorn.kaml:kaml", version.ref = "kaml" }
 coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
+arrow-fx-coroutines = { module = "io.arrow-kt:arrow-fx-coroutines", version.ref = "arrow" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+
+[bundles]
+arrow = ["arrow-core", "arrow-fx-coroutines"]

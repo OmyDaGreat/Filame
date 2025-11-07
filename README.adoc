@@ -24,7 +24,6 @@ Filame helps you:
 🛠️ *Paru Support* - Auto-install paru AUR helper when needed
 🚫 *Ignore Patterns* - Exclude files with glob patterns
 🎨 *Terminal UI* - Beautiful color-coded interface using Kotter
-🔧 *Mock Mode* - Run in non-Linux environments for testing and development
 ↔️ *Two-Way Sync* - Automatically sync package metadata to/from GitHub repo
 
 == Prerequisites
@@ -33,7 +32,6 @@ Filame helps you:
 - Kotlin 2.2.20
 - Git
 - Arch Linux (or any Linux distribution with pacman)
-- **Note:** Can run in mock mode on any OS (macOS, Windows, etc.) for testing
 
 == Installation
 
@@ -261,17 +259,17 @@ java -jar app/build/libs/filame.jar
 == Technical Details
 
 *Built with:*
-- Kotlin 2.2.20
-- Varabyte's Kotter 1.1.2 for terminal UI
-- JGit 6.10.0 for Git operations
-- Kotlinx Serialization for configuration
-- KAML for YAML parsing
+
+* Kotlin 2.2.20
+* Varabyte's Kotter 1.1.2 for terminal UI
+* JGit 6.10.0 for Git operations
+* Kotlinx Serialization for configuration
+* KAML for YAML parsing
 
 == Roadmap
 
 - [x] Support for package management (official and AUR)
 - [x] Paru AUR helper integration
-- [x] Mock mode for non-Linux environments
 - [x] Two-way sync of package metadata
 - [ ] Support for encrypted sensitive files
 - [ ] Automatic backup before applying changes
@@ -280,44 +278,6 @@ java -jar app/build/libs/filame.jar
 - [ ] Support for multiple GitHub repositories
 - [ ] Interactive file browser
 - [ ] Configuration profiles
-== Mock Mode for Non-Linux Systems
-
-Filame can run in mock mode on non-Linux systems (macOS, Windows, etc.) or in CI/CD environments. Mock mode simulates package operations while keeping all configuration and Git functionality intact.
-
-=== Automatic Detection
-
-Filame automatically enables mock mode when it detects a non-Linux operating system:
-
-[source,bash]
-----
-./gradlew run
-# Output: Non-Linux system detected. Enabling mock mode for package operations.
-----
-
-=== Manual Configuration
-
-Enable or disable mock mode through settings:
-
-1. Select "1. Configure settings"
-2. Answer "y" to enable or "n" to disable mock mode
-
-=== What Works in Mock Mode
-
-✓ Configuration tracking and management +
-✓ GitHub integration (pull/push) +
-✓ Package bundle management +
-✓ Package metadata export/import +
-✓ Two-way sync with repository +
-✓ File operations
-
-=== What's Simulated in Mock Mode
-
-⚠ Package installation (displays what would be installed) +
-⚠ Package removal (displays what would be removed) +
-⚠ Package updates (displays update operations) +
-⚠ Package status checks (always shows as not installed)
-
-For detailed information, see link:MOCK_MODE.md[Mock Mode Guide].
 
 == Two-Way Configuration Sync
 

@@ -15,14 +15,13 @@ class PackageManager(
     /**
      * Check if paru is installed
      */
-    fun isParuInstalled(): Boolean {
-        return try {
+    fun isParuInstalled(): Boolean =
+        try {
             val process = ProcessBuilder("which", "paru").start()
             process.waitFor() == 0
         } catch (_: Exception) {
             false
         }
-    }
 
     /**
      * Install paru AUR helper
@@ -161,14 +160,13 @@ class PackageManager(
     /**
      * Check if a package is installed
      */
-    fun isPackageInstalled(packageName: String): Boolean {
-        return try {
+    fun isPackageInstalled(packageName: String): Boolean =
+        try {
             val process = ProcessBuilder("pacman", "-Qq", packageName).start()
             process.waitFor() == 0
         } catch (_: Exception) {
             false
         }
-    }
 
     /**
      * Get installation status of all tracked packages
@@ -422,8 +420,8 @@ class PackageManager(
     /**
      * Remove a package
      */
-    fun removePackage(packageName: String): Result<Unit> {
-        return try {
+    fun removePackage(packageName: String): Result<Unit> =
+        try {
             val process =
                 ProcessBuilder("sudo", "pacman", "-R", "--noconfirm", packageName)
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT)
@@ -440,7 +438,6 @@ class PackageManager(
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 }
 
 /**

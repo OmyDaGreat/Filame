@@ -15,10 +15,12 @@ dependencies {
     implementation(libs.serialization)
     implementation(libs.kaml)
     implementation(libs.coroutines)
+    implementation(libs.bundles.arrow)
 }
 
 testing {
     suites {
+        @Suppress("unused")
         val test by getting(JvmTestSuite::class) {
             useKotlinTest(libs.versions.kotlin)
         }

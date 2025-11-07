@@ -1,10 +1,12 @@
 package xyz.malefic
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import com.charleskorn.kaml.Yaml
 import com.varabyte.kotter.foundation.input.Completions
 import com.varabyte.kotter.foundation.input.Keys
 import com.varabyte.kotter.foundation.input.input
-import com.varabyte.kotter.foundation.input.multilineInput
 import com.varabyte.kotter.foundation.input.onInputEntered
 import com.varabyte.kotter.foundation.input.onKeyPressed
 import com.varabyte.kotter.foundation.input.runUntilInputEntered
@@ -19,6 +21,8 @@ import com.varabyte.kotter.foundation.text.textLine
 import com.varabyte.kotter.foundation.text.white
 import com.varabyte.kotter.foundation.text.yellow
 import com.varabyte.kotter.runtime.Session
+import org.eclipse.jgit.api.Git
+import xyz.malefic.ConfigManager.configFile
 
 /**
  * Filame - File manager for Arch Linux configurations
@@ -45,17 +49,16 @@ fun main(vararg args: String) =
 /**
  * Common completions for yes/no prompts
  */
-private val yesNoCompletions: Completions = Completions("y", "n", "yes", "no")
+private val yesNoCompletions = Completions("y", "n", "yes", "no")
 
 /**
  * Display a colored header
  */
-private fun Session.displayHeader(text: String) {
+private fun Session.displayHeader(text: String) =
     section {
         cyan { textLine(text) }
         textLine()
     }.run()
-}
 
 /**
  * Read a line of input
@@ -83,30 +86,10 @@ private fun Session.readInput(
 }
 
 /**
- * Read multi-line input
- */
-private fun Session.readMultiLineInput(prompt: String = ""): String {
-    var result = ""
-    section {
-        if (prompt.isNotEmpty()) {
-            textLine(prompt)
-        }
-        multilineInput()
-    }.runUntilInputEntered {
-        onInputEntered {
-            result = input
-        }
-    }
-    return result
-}
-
-/**
  * Load existing config or create a new one
  */
-fun Session.loadOrCreateConfig(): FilameConfig {
-    val configFile = ConfigManager.getConfigFile()
-
-    return if (configFile.exists()) {
+fun Session.loadOrCreateConfig(): FilameConfig =
+    if (configFile.exists()) {
         try {
             val yaml = configFile.readText()
             Yaml.default.decodeFromString(FilameConfig.serializer(), yaml)
@@ -119,15 +102,14 @@ fun Session.loadOrCreateConfig(): FilameConfig {
     } else {
         FilameConfig()
     }
-}
 
 /**
  * Save configuration to file
  */
-fun Session.saveConfig(config: FilameConfig) {
+fun Session.saveConfig(config: FilameConfig) =
     try {
         val yaml = Yaml.default.encodeToString(FilameConfig.serializer(), config)
-        ConfigManager.getConfigFile().writeText(yaml)
+        configFile.writeText(yaml)
         section {
             green { textLine("Configuration saved successfully!") }
         }.run()
@@ -136,7 +118,6 @@ fun Session.saveConfig(config: FilameConfig) {
             red { textLine("Error saving config: ${e.message}") }
         }.run()
     }
-}
 
 /**
  * Main menu for the application
@@ -745,20 +726,12 @@ fun Session.syncWithGitHub(config: FilameConfig): FilameConfig {
     return currentConfig
 }
 
-/**
- * Pull changes from GitHub
- */
-fun Session.syncPull(config: FilameConfig): FilameConfig {
-    section {
-        cyan { textLine("═══ Sync from GitHub (Pull) ═══") }
-        textLine()
-    }.run()
-
+fun Session.checkRepoStatus(config: FilameConfig): Either<Pair<GitManager, Result<Git>>, FilameConfig> {
     if (config.githubRepo.isEmpty()) {
         section {
             red { textLine("GitHub repository not configured. Please configure first.") }
         }.run()
-        return config
+        return config.right()
     }
 
     val gitManager = GitManager(config)
@@ -768,10 +741,32 @@ fun Session.syncPull(config: FilameConfig): FilameConfig {
         section {
             red { textLine("Error initializing repository: ${gitResult.exceptionOrNull()?.message}") }
         }.run()
-        return config
+        return config.right()
     }
 
-    val git = gitResult.getOrNull()!!
+    return (gitManager to gitResult).left()
+}
+
+/**
+ * Pull changes from GitHub
+ */
+fun Session.syncPull(config: FilameConfig): FilameConfig {
+    section {
+        cyan { textLine("═══ Sync from GitHub (Pull) ═══") }
+        textLine()
+    }.run()
+
+    val result = checkRepoStatus(config)
+
+    val (gitManager, git) =
+        when (result) {
+            is Either.Right -> return result.getOrNull()!!
+            is Either.Left -> {
+                val (gm, gitResult) = result.value
+                val actualGit = gitResult.getOrNull()!!
+                gm to actualGit
+            }
+        }
 
     section {
         textLine("Pulling latest changes from GitHub...")
@@ -803,24 +798,17 @@ fun Session.syncPush(config: FilameConfig) {
         textLine()
     }.run()
 
-    if (config.githubRepo.isEmpty()) {
-        section {
-            red { textLine("GitHub repository not configured. Please configure first.") }
-        }.run()
-        return
-    }
+    val result = checkRepoStatus(config)
 
-    val gitManager = GitManager(config)
-    val gitResult = gitManager.initializeRepo()
-
-    if (gitResult.isFailure) {
-        section {
-            red { textLine("Error initializing repository: ${gitResult.exceptionOrNull()?.message}") }
-        }.run()
-        return
-    }
-
-    val git = gitResult.getOrNull()!!
+    val (gitManager, git) =
+        when (result) {
+            is Either.Right -> return
+            is Either.Left -> {
+                val (gm, gitResult) = result.value
+                val actualGit = gitResult.getOrNull()!!
+                gm to actualGit
+            }
+        }
 
     val message = readInput("Enter commit message: ").ifEmpty { "Update configs from ${config.deviceName}" }
 
