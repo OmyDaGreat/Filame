@@ -1,8 +1,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.shadow)
     application
-    kotlin("plugin.serialization") version "2.2.21"
-    id("com.gradleup.shadow") version "9.2.2"
+    kotlin("plugin.serialization") version libs.versions.kotlin
 }
 
 repositories {
