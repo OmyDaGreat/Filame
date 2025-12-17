@@ -1,6 +1,6 @@
 [versions]
 kotter = "1.2.1"
-jgit = "7.4.0.202509020913-r"
+jgit = "7.5.0.202512021534-r"
 serialization = "1.9.0"
 kaml = "0.102.0"
 coroutines = "1.10.2"
