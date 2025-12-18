@@ -1,8 +1,9 @@
-package xyz.malefic
+package xyz.malefic.filame.git
 
-import java.io.File
+import xyz.malefic.filame.config.ConfigFile
+import xyz.malefic.filame.config.FilameConfig
+import xyz.malefic.filame.config.PackageBundle
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class GitManagerTest {
@@ -40,20 +41,22 @@ class GitManagerTest {
             FilameConfig(
                 deviceName = "test-device",
                 githubRepo = "https://github.com/test/repo.git",
-                packageBundles = listOf(
-                    PackageBundle(
-                        name = "vim",
-                        source = "official",
-                        description = "Text editor",
-                        configFiles = listOf(
-                            ConfigFile(
-                                sourcePath = "/home/user/.vimrc",
-                                destinationPath = "vim/.vimrc",
-                                description = "Vim config"
-                            )
-                        )
-                    )
-                )
+                packageBundles =
+                    listOf(
+                        PackageBundle(
+                            name = "vim",
+                            source = "official",
+                            description = "Text editor",
+                            configFiles =
+                                listOf(
+                                    ConfigFile(
+                                        sourcePath = "/home/user/.vimrc",
+                                        destinationPath = "vim/.vimrc",
+                                        description = "Vim config",
+                                    ),
+                                ),
+                        ),
+                    ),
             )
 
         val gitManager = GitManager(config)

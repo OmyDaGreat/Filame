@@ -1,9 +1,14 @@
-package xyz.malefic
+package xyz.malefic.filame.`package`
 
 import com.charleskorn.kaml.Yaml
+import xyz.malefic.filame.config.ConfigFile
+import xyz.malefic.filame.config.FilameConfig
+import xyz.malefic.filame.config.PackageBundle
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Manages package operations including installation, removal, and tracking
@@ -13,77 +18,24 @@ class PackageManager(
     private val repoDir: File = File(System.getProperty("user.home"), ".config/filame/repo"),
 ) {
     /**
-     * Check if paru is installed
+     * Check if a specific AUR helper is installed
      */
-    fun isParuInstalled(): Boolean =
-        try {
-            val process = ProcessBuilder("which", "paru").start()
-            process.waitFor() == 0
-        } catch (_: Exception) {
-            false
-        }
+    fun isAurHelperInstalled(helper: AurHelper) = AurHelperManager.isInstalled(helper)
 
     /**
-     * Install paru AUR helper
+     * Check if any AUR helper is installed
      */
-    fun installParu(): Result<Unit> {
-        return try {
-            if (isParuInstalled()) {
-                return Result.success(Unit)
-            }
+    fun isAurHelperInstalled() = AurHelperManager.isAnyInstalled()
 
-            // Install dependencies
-            val deps = arrayOf("git", "base-devel")
-            for (dep in deps) {
-                val checkProcess = ProcessBuilder("pacman", "-Qq", dep).start()
-                if (checkProcess.waitFor() != 0) {
-                    val installProcess =
-                        ProcessBuilder("sudo", "pacman", "-S", "--noconfirm", dep)
-                            .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                            .redirectError(ProcessBuilder.Redirect.INHERIT)
-                            .start()
-                    if (installProcess.waitFor() != 0) {
-                        return Result.failure(Exception("Failed to install $dep"))
-                    }
-                }
-            }
+    /**
+     * Get the installed AUR helper (yay takes priority over paru), or null if neither is installed
+     */
+    fun getAurHelper() = AurHelperManager.getInstalled()
 
-            // Clone and build paru
-            val tmpDir = File("/tmp/paru-install-${System.currentTimeMillis()}")
-            tmpDir.mkdirs()
-
-            val cloneProcess =
-                ProcessBuilder("git", "clone", "https://aur.archlinux.org/paru.git")
-                    .directory(tmpDir)
-                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                    .redirectError(ProcessBuilder.Redirect.INHERIT)
-                    .start()
-
-            if (cloneProcess.waitFor() != 0) {
-                tmpDir.deleteRecursively()
-                return Result.failure(Exception("Failed to clone paru repository"))
-            }
-
-            val paruDir = File(tmpDir, "paru")
-            val buildProcess =
-                ProcessBuilder("makepkg", "-si", "--noconfirm")
-                    .directory(paruDir)
-                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                    .redirectError(ProcessBuilder.Redirect.INHERIT)
-                    .start()
-
-            val exitCode = buildProcess.waitFor()
-            tmpDir.deleteRecursively()
-
-            if (exitCode != 0) {
-                return Result.failure(Exception("Failed to build and install paru"))
-            }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    /**
+     * Install an AUR helper
+     */
+    fun installAurHelper(helper: AurHelper) = AurHelperManager.install(helper)
 
     /**
      * Search for packages in official repos and AUR
@@ -120,17 +72,18 @@ class PackageManager(
             }
             pacmanProcess.waitFor()
 
-            // Search AUR with paru if available
-            if (isParuInstalled()) {
-                val paruProcess =
-                    ProcessBuilder("paru", "-Ssa", query)
+            // Search AUR with yay or paru if available
+            val aurHelper = getAurHelper()
+            if (aurHelper != null) {
+                val aurProcess =
+                    ProcessBuilder(aurHelper.command, "-Ssa", query)
                         .redirectError(ProcessBuilder.Redirect.INHERIT)
                         .start()
 
-                val paruReader = BufferedReader(InputStreamReader(paruProcess.inputStream))
+                val aurReader = BufferedReader(InputStreamReader(aurProcess.inputStream))
                 currentPackage = null
 
-                while (paruReader.readLine().also { line = it } != null) {
+                while (aurReader.readLine().also { line = it } != null) {
                     if (line!!.startsWith(" ")) {
                         // This is a description line
                         if (currentPackage != null) {
@@ -149,7 +102,7 @@ class PackageManager(
                         }
                     }
                 }
-                paruProcess.waitFor()
+                aurProcess.waitFor()
             }
 
             Result.success(results)
@@ -183,10 +136,12 @@ class PackageManager(
         return try {
             val command =
                 if (pkg.source == "aur") {
-                    if (!isParuInstalled()) {
-                        return Result.failure(Exception("Paru is required for AUR packages but not installed"))
-                    }
-                    arrayOf("paru", "-S", "--noconfirm", pkg.name)
+                    val aurHelper =
+                        getAurHelper()
+                            ?: return Result.failure(
+                                Exception("An AUR helper (yay or paru) is required for AUR packages but not installed"),
+                            )
+                    arrayOf(aurHelper.command, "-S", "--noconfirm", pkg.name)
                 } else {
                     arrayOf("sudo", "pacman", "-S", "--noconfirm", pkg.name)
                 }
@@ -245,10 +200,10 @@ class PackageManager(
                 val destination = File(configFile.sourcePath)
                 destination.parentFile?.mkdirs()
 
-                java.nio.file.Files.copy(
+                Files.copy(
                     source.toPath(),
                     destination.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.REPLACE_EXISTING,
                 )
                 appliedFiles.add(configFile.sourcePath)
             }
@@ -273,10 +228,10 @@ class PackageManager(
                 val destination = File(repoDir, configFile.destinationPath)
                 destination.parentFile?.mkdirs()
 
-                java.nio.file.Files.copy(
+                Files.copy(
                     source.toPath(),
                     destination.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.REPLACE_EXISTING,
                 )
                 exportedFiles.add(configFile.destinationPath)
             }
@@ -398,15 +353,16 @@ class PackageManager(
                 return Result.failure(Exception("Failed to update official packages"))
             }
 
-            // Update AUR packages if paru is installed
-            if (isParuInstalled()) {
-                val paruProcess =
-                    ProcessBuilder("paru", "-Sua", "--noconfirm")
+            // Update AUR packages if yay or paru is installed
+            val aurHelper = getAurHelper()
+            if (aurHelper != null) {
+                val aurProcess =
+                    ProcessBuilder(aurHelper.command, "-Sua", "--noconfirm")
                         .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                         .redirectError(ProcessBuilder.Redirect.INHERIT)
                         .start()
 
-                if (paruProcess.waitFor() != 0) {
+                if (aurProcess.waitFor() != 0) {
                     return Result.failure(Exception("Failed to update AUR packages"))
                 }
             }
@@ -439,12 +395,3 @@ class PackageManager(
             Result.failure(e)
         }
 }
-
-/**
- * Search result for a package
- */
-data class PackageSearchResult(
-    val name: String,
-    val source: String,
-    val description: String,
-)

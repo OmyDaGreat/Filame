@@ -1,7 +1,6 @@
-package xyz.malefic
+package xyz.malefic.filame.config
 
 import com.charleskorn.kaml.Yaml
-import xyz.malefic.ConfigManager.configFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -93,7 +92,7 @@ class ConfigTest {
     @Test
     fun testConfigManagerPaths() {
         ConfigManager.ensureConfigDir()
-        assertNotNull(configFile)
-        assertTrue(configFile.path.contains(".config/filame"))
+        assertNotNull(ConfigManager.configFile)
+        assertTrue(ConfigManager.configFile.path.contains(".config/filame"))
     }
 }
