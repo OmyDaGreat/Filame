@@ -1,5 +1,8 @@
 package xyz.malefic.filame.git
 
+import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.errors.GitAPIException
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
@@ -50,15 +53,6 @@ sealed class GitError {
 }
 
 /**
- * Exception wrapper carrying a GitError. Use this when returning a failed kotlin.Result so
- * the failure value is a throwable that still exposes a typed GitError.
- */
-class GitException(
-    val error: GitError,
-    cause: Throwable? = null,
-) : Exception(error.toString(), cause)
-
-/**
  * Manages Git operations for syncing configuration files.
  *
  * @property config The configuration object containing details such as the GitHub repository URL.
@@ -71,44 +65,43 @@ class GitManager(
     /**
      * Initializes or clones the repository.
      *
-     * @return A `Result` containing the initialized or cloned `Git` object, or a GitException if the operation fails.
+     * @return An `Either` containing the initialized or cloned `Git` object on the right, or a GitError on the left.
      */
-    fun initializeRepo(): Result<Git> {
-        return try {
-            if (repoDir.exists() && File(repoDir, ".git").exists()) {
-                Result.success(Git.open(repoDir))
-            } else {
-                if (config.githubRepo.isEmpty()) {
-                    return Result.failure(GitException(GitError.RepoNotConfigured))
-                }
-                repoDir.mkdirs()
-                Result.success(
+    fun initializeRepo(): Either<GitError, Git> =
+        either {
+            try {
+                if (repoDir.exists() && File(repoDir, ".git").exists()) {
+                    Git.open(repoDir)
+                } else {
+                    repoDir.mkdirs()
                     Git
                         .cloneRepository()
                         .setURI(config.githubRepo)
                         .setDirectory(repoDir)
-                        .call(),
-                )
+                        .call()
+                }
+            } catch (e: GitAPIException) {
+                raise(GitError.GitApi(e.message ?: e.toString()))
+            } catch (e: Exception) {
+                raise(GitError.IoError(e.message ?: e.toString()))
             }
-        } catch (e: GitAPIException) {
-            Result.failure(GitException(GitError.GitApi(e.message ?: e.toString()), e))
-        } catch (e: Exception) {
-            Result.failure(GitException(GitError.IoError(e.message ?: e.toString()), e))
         }
-    }
 
     /**
      * Pulls the latest changes from the remote repository.
      *
      * @param git The `Git` object representing the repository.
-     * @return A `Result` indicating success or failure of the pull operation.
+     * @return An `Either` indicating success or failure of the pull operation.
      */
-    fun pull(git: Git): Result<Unit> =
-        try {
-            git.pull().call()
-            Result.success(Unit)
-        } catch (e: GitAPIException) {
-            Result.failure(GitException(GitError.PullFailed(e.message ?: e.toString()), e))
+    fun pull(git: Git): Either<GitError, Unit> =
+        either {
+            try {
+                git.pull().call()
+            } catch (e: GitAPIException) {
+                raise(GitError.PullFailed(e.message ?: e.toString()))
+            } catch (e: Exception) {
+                raise(GitError.IoError(e.message ?: e.toString()))
+            }
         }
 
     /**
@@ -117,24 +110,25 @@ class GitManager(
      * @param git The `Git` object representing the repository.
      * @param username Optional username for authentication.
      * @param token Optional personal access token for authentication.
-     * @return A `Result` indicating success or failure of the push operation.
+     * @return An `Either` indicating success or failure of the push operation.
      */
     fun push(
         git: Git,
         username: String? = null,
         token: String? = null,
-    ): Result<Unit> =
-        try {
-            val pushCommand = git.push()
-            if (username != null && token != null) {
-                pushCommand.setCredentialsProvider(
-                    UsernamePasswordCredentialsProvider(username, token),
-                )
+    ): Either<GitError, Unit> =
+        either {
+            try {
+                val pushCommand = git.push()
+                if (username != null && token != null) {
+                    pushCommand.setCredentialsProvider(
+                        UsernamePasswordCredentialsProvider(username, token),
+                    )
+                }
+                pushCommand.call()
+            } catch (e: GitAPIException) {
+                raise(GitError.PushFailed(e.message ?: e.toString()))
             }
-            pushCommand.call()
-            Result.success(Unit)
-        } catch (e: GitAPIException) {
-            Result.failure(GitException(GitError.PushFailed(e.message ?: e.toString()), e))
         }
 
     /**
@@ -142,35 +136,37 @@ class GitManager(
      *
      * @param git The `Git` object representing the repository.
      * @param message The commit message.
-     * @return A `Result` indicating success or failure of the commit operation.
+     * @return An `Either` indicating success or failure of the commit operation.
      */
     fun commit(
         git: Git,
         message: String,
-    ): Result<Unit> =
-        try {
-            git.add().addFilepattern(".").call()
-            git.commit().setMessage(message).call()
-            Result.success(Unit)
-        } catch (e: GitAPIException) {
-            Result.failure(GitException(GitError.CommitFailed(e.message ?: e.toString()), e))
+    ): Either<GitError, Unit> =
+        either {
+            try {
+                git.add().addFilepattern(".").call()
+                git.commit().setMessage(message).call()
+            } catch (e: GitAPIException) {
+                raise(GitError.CommitFailed(e.message ?: e.toString()))
+            }
         }
 
     /**
      * Save credentials to ~/.git-credentials and attempt to enable the Git credential store helper.
-     * This is non-UI logic and returns a [Result] so callers can decide how to surface errors.
+     * This is non-UI logic and returns an [Either] so callers can decide how to surface errors.
      */
     fun saveCredentials(
         username: String,
         token: String,
-    ): Result<Unit> {
-        return try {
+    ): Either<GitError, Unit> =
+        either {
             val credFile = File(System.getProperty("user.home"), ".git-credentials")
             val entry = "https://$username:$token@github.com\n"
+
             try {
                 credFile.appendText(entry)
             } catch (e: Exception) {
-                return Result.failure(GitException(GitError.IoError(e.message ?: e.toString()), e))
+                raise(GitError.IoError(e.message ?: e.toString()))
             }
 
             try {
@@ -185,18 +181,12 @@ class GitManager(
                             .bufferedReader()
                             .use { it.readText() }
                             .trim()
-                    // Credentials were written but enabling store helper failed
-                    return Result.failure(GitException(GitError.SaveCredentialsFailed(output)))
+                    raise(GitError.SaveCredentialsFailed(output))
                 }
             } catch (e: Exception) {
-                return Result.failure(GitException(GitError.SaveCredentialsFailed(e.message ?: e.toString()), e))
+                raise(GitError.SaveCredentialsFailed(e.message ?: e.toString()))
             }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(GitException(GitError.SaveCredentialsFailed(e.message ?: e.toString()), e))
         }
-    }
 
     /**
      * Attempt to push, first without credentials then (optionally) with provided credentials.
@@ -208,28 +198,26 @@ class GitManager(
         username: String? = null,
         token: String? = null,
         saveCredentialsIfUsed: Boolean = false,
-    ): Result<Unit> {
-        val firstAttempt = push(git)
-        if (firstAttempt.isSuccess) return firstAttempt
+    ): Either<GitError, Unit> =
+        push(git).fold(
+            ifLeft = { _ ->
+                either {
+                    ensure(!username.isNullOrEmpty() && !token.isNullOrEmpty()) {
+                        raise(GitError.PushFailed("Credentials required"))
+                    }
 
-        if (!username.isNullOrEmpty() && !token.isNullOrEmpty()) {
-            val secondAttempt = push(git, username, token)
-            if (secondAttempt.isSuccess) {
-                if (saveCredentialsIfUsed) {
-                    val saveResult = saveCredentials(username, token)
-                    if (saveResult.isFailure) {
-                        // Return failure to allow UI to show message but indicate that push succeeded
-                        val msg = "Push succeeded but saving credentials failed: ${saveResult.exceptionOrNull()?.message}"
-                        return Result.failure(GitException(GitError.SaveCredentialsFailed(msg)))
+                    push(git, username, token).bind()
+
+                    if (saveCredentialsIfUsed) {
+                        saveCredentials(username, token)
+                            .onLeft { error ->
+                                raise(GitError.SaveCredentialsFailed("Push succeeded but saving credentials failed: $error"))
+                            }.bind()
                     }
                 }
-                return Result.success(Unit)
-            }
-            return secondAttempt
-        }
-
-        return firstAttempt
-    }
+            },
+            ifRight = { Either.Right(Unit) },
+        )
 
     /**
      * High-level orchestration: commit changes and attempt to push.
@@ -249,35 +237,34 @@ class GitManager(
         commitMessage: String,
         credentialProvider: (() -> Pair<String, String>?)? = null,
         saveCredentialsIfUsed: Boolean = true,
-    ): Result<Unit> {
-        // Commit first
-        val commitResult = commit(git, commitMessage)
-        if (commitResult.isFailure) return commitResult
+    ): Either<GitError, Unit> =
+        either {
+            commit(git, commitMessage).bind()
+            push(git).bind()
+        }.fold(
+            ifLeft = { firstError ->
+                either {
+                    val provider = credentialProvider ?: raise(firstError)
 
-        // Try pushing without credentials first
-        val firstPush = push(git)
-        if (firstPush.isSuccess) return firstPush
+                    val creds =
+                        try {
+                            provider()
+                        } catch (e: Exception) {
+                            raise(GitError.PushFailed("Credential provider failed: ${e.message}"))
+                        }
 
-        // If no credential provider given, return the original push failure
-        if (credentialProvider == null) return firstPush
+                    ensure(creds != null) { raise(firstError) }
 
-        // Ask UI for credentials (UI may return null to indicate user declined)
-        val creds =
-            try {
-                credentialProvider()
-            } catch (e: Exception) {
-                return Result.failure(GitException(GitError.PushFailed("Credential provider failed: ${e.message}"), e))
-            }
+                    val (username, token) = creds
+                    ensure(username.isNotEmpty() && token.isNotEmpty()) {
+                        raise(GitError.PushFailed("Empty username or token provided"))
+                    }
 
-        if (creds == null) return firstPush
-
-        val (username, token) = creds
-        if (username.isEmpty() || token.isEmpty()) {
-            return Result.failure(GitException(GitError.PushFailed("Empty username or token provided")))
-        }
-
-        return tryPushWithOptionalCredentials(git, username, token, saveCredentialsIfUsed)
-    }
+                    tryPushWithOptionalCredentials(git, username, token, saveCredentialsIfUsed).bind()
+                }
+            },
+            ifRight = { Either.Right(Unit) },
+        )
 
     /**
      * Perform a Git pull operation.
@@ -285,20 +272,15 @@ class GitManager(
      * Prepares the git repository and pulls the latest changes from the remote.
      * Automatically closes the Git instance after the operation completes.
      *
-     * @return A `Result` indicating success or failure with appropriate [GitException].
+     * @return An `Either` indicating success or failure with appropriate [GitError].
      */
-    fun syncPull(): Result<Unit> {
-        val prepResult = config.prepareGitRepo()
-        if (prepResult.isFailure) {
-            return Result.failure(prepResult.exceptionOrNull() ?: Exception("Failed to prepare git repo"))
+    fun syncPull(): Either<GitError, Unit> =
+        either {
+            val (gitManager, git) = config.prepareGitRepo().bind()
+            git.use { git ->
+                gitManager.pull(git).bind()
+            }
         }
-
-        val (gitManager, git) = prepResult.getOrThrow()
-        val pullResult = gitManager.pull(git)
-        git.close()
-
-        return pullResult
-    }
 
     /**
      * Perform a Git push operation with commit.
@@ -310,47 +292,33 @@ class GitManager(
      * @param commitMessage The commit message to use.
      * @param credentialProvider Optional callback invoked when credentials are needed for push.
      * @param saveCredentialsIfUsed Whether to persist credentials when push succeeds with them.
-     * @return A `Result` indicating success or failure with appropriate [GitException].
+     * @return An `Either` indicating success or failure with appropriate [GitError].
      */
     fun syncPush(
         commitMessage: String,
         credentialProvider: (() -> Pair<String, String>?)? = null,
         saveCredentialsIfUsed: Boolean = true,
-    ): Result<Unit> {
-        val prepResult = config.prepareGitRepo()
-        if (prepResult.isFailure) {
-            return Result.failure(prepResult.exceptionOrNull() ?: Exception("Failed to prepare git repo"))
+    ): Either<GitError, Unit> =
+        either {
+            val (gitManager, git) = config.prepareGitRepo().bind()
+            git.use { git ->
+                gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+            }
         }
-
-        val (gitManager, git) = prepResult.getOrThrow()
-        val result = gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
-        git.close()
-
-        return result
-    }
 }
 
 /**
  * Prepare a GitManager and initialize the Git repository for this config.
  *
- * This function returns a Result containing a Pair of the created GitManager and the initialized
- * Git instance on success, or a failure Result with the underlying GitException. It intentionally
- * does not perform any UI actions so callers (UI layer) can decide how to present errors.
+ * This function returns an Either containing a Pair of the created GitManager and the initialized
+ * Git instance on success, or a GitError on the left.
  */
-fun FilameConfig.prepareGitRepo(): Result<Pair<GitManager, Git>> {
-    if (this.githubRepo.isEmpty()) {
-        return Result.failure(GitException(GitError.RepoNotConfigured))
-    }
+fun FilameConfig.prepareGitRepo(): Either<GitError, Pair<GitManager, Git>> =
+    either {
+        ensure(githubRepo.isNotEmpty()) { raise(GitError.RepoNotConfigured) }
 
-    val gitManager = GitManager(this)
-    val gitResult = gitManager.initializeRepo()
+        val gitManager = GitManager(this@prepareGitRepo)
+        val git = gitManager.initializeRepo().bind()
 
-    return if (gitResult.isSuccess) {
-        Result.success(gitManager to gitResult.getOrThrow())
-    } else {
-        Result.failure(
-            gitResult.exceptionOrNull() as? GitException
-                ?: GitException(GitError.GitApi(gitResult.exceptionOrNull()?.message ?: "Unknown error"), gitResult.exceptionOrNull()),
-        )
+        gitManager to git
     }
-}

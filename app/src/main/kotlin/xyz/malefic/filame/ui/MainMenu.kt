@@ -29,7 +29,7 @@ fun Session.showMainMenu(initialConfig: FilameConfig) {
 
     while (running) {
         var exit by liveVarOf(false)
-        var choice by liveVarOf(0)
+        var choice by liveVarOf('c')
         section {
             cyan { textLine("╔════════════════════════════════════════╗") }
             cyan {
@@ -53,19 +53,22 @@ fun Session.showMainMenu(initialConfig: FilameConfig) {
             textLine("Select an option: ")
 
             arrayListOf(
-                "1. Configure settings",
-                "2. Scan repo for packages",
-                "3. List pkg bundles",
-                "4. Add/Edit pkg bundle",
-                "5. Install pkg & apply config",
-                "6. Install all missing packages",
-                "7. Update all packages",
-                "8. Export pkg configs to repo",
-                "9. Sync with GitHub",
-                "0. Exit",
-            ).forEachIndexed { i, line ->
-                val index = if (i == 9) 0 else i + 1
-                if (choice == index) {
+                "c. Configure settings",
+                "s. Scan repo for packages",
+                "l. List pkg bundles",
+                "a. Add/Edit pkg bundle",
+                "i. Install pkg & apply config",
+                "m. Install all missing packages",
+                "u. Update all packages",
+                "e. Export pkg configs to repo",
+                "g. Sync with GitHub",
+                "f. Search for packages",
+                "r. Remove package",
+                "h. Help",
+                "q. Exit",
+            ).forEach { line ->
+                val key = line[0]
+                if (choice == key) {
                     cyan { textLine(line) }
                 } else {
                     green { textLine(line) }
@@ -78,118 +81,79 @@ fun Session.showMainMenu(initialConfig: FilameConfig) {
                 running = false
             }
         }.runUntilKeyPressed(
-            Keys.DIGIT_1,
-            Keys.DIGIT_2,
-            Keys.DIGIT_3,
-            Keys.DIGIT_4,
-            Keys.DIGIT_5,
-            Keys.DIGIT_6,
-            Keys.DIGIT_7,
-            Keys.DIGIT_8,
-            Keys.DIGIT_9,
-            Keys.DIGIT_0,
+            Keys.ENTER,
         ) {
             onKeyPressed {
                 when (key) {
-                    Keys.DIGIT_1 -> {
-                        choice = 1
-                    }
-
-                    Keys.DIGIT_2 -> {
-                        choice = 2
-                    }
-
-                    Keys.DIGIT_3 -> {
-                        choice = 3
-                    }
-
-                    Keys.DIGIT_4 -> {
-                        choice = 4
-                    }
-
-                    Keys.DIGIT_5 -> {
-                        choice = 5
-                    }
-
-                    Keys.DIGIT_6 -> {
-                        choice = 6
-                    }
-
-                    Keys.DIGIT_7 -> {
-                        choice = 7
-                    }
-
-                    Keys.DIGIT_8 -> {
-                        choice = 8
-                    }
-
-                    Keys.DIGIT_9 -> {
-                        choice = 9
-                    }
-
-                    Keys.DIGIT_0 -> {
-                        choice = 0
-                    }
+                    Keys.C -> choice = 'c'
+                    Keys.S -> choice = 's'
+                    Keys.L -> choice = 'l'
+                    Keys.A -> choice = 'a'
+                    Keys.I -> choice = 'i'
+                    Keys.M -> choice = 'm'
+                    Keys.U -> choice = 'u'
+                    Keys.E -> choice = 'e'
+                    Keys.G -> choice = 'g'
+                    Keys.F -> choice = 'f'
+                    Keys.R -> choice = 'r'
+                    Keys.H -> choice = 'h'
+                    Keys.Q -> choice = 'q'
 
                     Keys.LEFT, Keys.UP -> {
                         choice =
                             when (choice) {
-                                1 -> 0
-                                0 -> 9
-                                else -> choice - 1
+                                'c' -> 'q'
+                                's' -> 'c'
+                                'l' -> 's'
+                                'a' -> 'l'
+                                'i' -> 'a'
+                                'm' -> 'i'
+                                'u' -> 'm'
+                                'e' -> 'u'
+                                'g' -> 'e'
+                                'f' -> 'g'
+                                'r' -> 'f'
+                                'h' -> 'r'
+                                'q' -> 'h'
+                                else -> 'c'
                             }
                     }
 
                     Keys.RIGHT, Keys.DOWN -> {
                         choice =
                             when (choice) {
-                                9 -> 0
-                                0 -> 1
-                                else -> choice + 1
+                                'c' -> 's'
+                                's' -> 'l'
+                                'l' -> 'a'
+                                'a' -> 'i'
+                                'i' -> 'm'
+                                'm' -> 'u'
+                                'u' -> 'e'
+                                'e' -> 'g'
+                                'g' -> 'f'
+                                'f' -> 'r'
+                                'r' -> 'h'
+                                'h' -> 'q'
+                                'q' -> 'c'
+                                else -> 'c'
                             }
                     }
 
                     Keys.ENTER -> {
                         when (choice) {
-                            1 -> {
-                                config = configureSettings(config)
-                            }
-
-                            2 -> {
-                                config = scanRepoForPackages(config)
-                            }
-
-                            3 -> {
-                                listPackageBundles(config)
-                            }
-
-                            4 -> {
-                                config = addOrEditPackageBundle(config)
-                            }
-
-                            5 -> {
-                                installPackageWithConfig(config)
-                            }
-
-                            6 -> {
-                                installAllMissingPackages(config)
-                            }
-
-                            7 -> {
-                                updateAllPackages(config)
-                            }
-
-                            8 -> {
-                                exportPackageConfigs(config)
-                            }
-
-                            9 -> {
-                                config = syncWithGitHub(config)
-                            }
-
-                            0 -> {
-                                exit = true
-                            }
+                            'c' -> config = configureSettings(config)
+                            's' -> config = scanRepoForPackages(config)
+                            'l' -> listPackageBundles(config)
+                            'a' -> config = addOrEditPackageBundle(config)
+                            'i' -> installPackageWithConfig(config)
+                            'm' -> installAllMissingPackages(config)
+                            'u' -> updateAllPackages(config)
+                            'e' -> exportPackageConfigs(config)
+                            'g' -> config = syncWithGitHub(config)
+                            'f' -> searchForPackages(config)
+                            'r' -> config = removePackageInteractive(config)
+                            'h' -> showHelp()
+                            'q' -> exit = true
                         }
                     }
                 }

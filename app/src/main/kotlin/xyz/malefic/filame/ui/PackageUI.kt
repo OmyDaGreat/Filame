@@ -13,7 +13,6 @@ import xyz.malefic.filame.config.ConfigFile
 import xyz.malefic.filame.config.FilameConfig
 import xyz.malefic.filame.config.PackageBundle
 import xyz.malefic.filame.git.GitError
-import xyz.malefic.filame.git.GitException
 import xyz.malefic.filame.pkg.AurHelper
 import xyz.malefic.filame.pkg.PackageManager
 
@@ -150,33 +149,34 @@ fun Session.addOrEditPackageBundle(config: FilameConfig): FilameConfig {
 
         val exportResult = packageManager.exportBundleAndPushWithMetadata(bundle, commitMessage)
 
-        if (exportResult.isSuccess) {
-            section {
-                green {
-                    textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
-                    textLine("✓ Package metadata exported to repo: ${exportResult.getOrNull()}")
-                }
-            }.run()
-        } else {
-            // Handle various Git-related errors and surface friendly messages to the user
-            val ex = exportResult.exceptionOrNull() as? GitException
-            when (val err2 = ex?.error) {
-                is GitError.PushFailed -> {
-                    showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
-                    showWarning("⚠ Could not push metadata to repo: ${err2.message}")
-                }
+        exportResult.fold(
+            ifLeft = { err ->
+                when (err) {
+                    is GitError.PushFailed -> {
+                        showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
+                        showWarning("⚠ Could not push metadata to repo: ${err.message}")
+                    }
 
-                is GitError.SaveCredentialsFailed -> {
-                    showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
-                    showWarning("⚠ Metadata exported, but saving credentials failed: ${err2.message}")
-                }
+                    is GitError.SaveCredentialsFailed -> {
+                        showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
+                        showWarning("⚠ Metadata exported, but saving credentials failed: ${err.message}")
+                    }
 
-                else -> {
-                    showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
-                    showWarning("⚠ Could not export metadata to repo: ${exportResult.exceptionOrNull()?.message}")
+                    else -> {
+                        showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
+                        showWarning("⚠ Could not export metadata to repo: $err")
+                    }
                 }
-            }
-        }
+            },
+            ifRight = { metadataPath ->
+                section {
+                    green {
+                        textLine("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
+                        textLine("✓ Package metadata exported to repo: $metadataPath")
+                    }
+                }.run()
+            },
+        )
     } else {
         // No Git configured; just show success
         showSuccess("✓ Package bundle ${if (existingIndex >= 0) "updated" else "added"} successfully!")
@@ -228,31 +228,36 @@ fun Session.installPackageWithConfig(config: FilameConfig) {
     showInfo("Installing package ${bundle.name}...")
     val installResult = packageManager.installPackage(bundle)
 
-    if (installResult.isFailure) {
-        showError("Error installing package: ${installResult.exceptionOrNull()?.message}")
-        return
-    }
+    installResult.fold(
+        ifLeft = { err ->
+            showError("Error installing package: $err")
+            return
+        },
+        ifRight = {},
+    )
 
     // Apply configuration
     if (bundle.configFiles.isNotEmpty()) {
         showInfo("Applying configuration files for ${bundle.name}...")
         val applyResult = packageManager.applyPackageConfig(bundle)
 
-        if (applyResult.isSuccess) {
-            val files = applyResult.getOrNull() ?: emptyList()
-            section {
-                green { textLine("✓ Package '${bundle.name}' installed and configured successfully!") }
-                if (files.isNotEmpty()) {
-                    textLine("Applied ${files.size} config file(s):")
-                    files.forEach { file ->
-                        text("  • ")
-                        textLine(file)
+        applyResult.fold(
+            ifLeft = { err ->
+                showWarning("⚠ Package installed but configuration failed: $err")
+            },
+            ifRight = { files ->
+                section {
+                    green { textLine("✓ Package '${bundle.name}' installed and configured successfully!") }
+                    if (files.isNotEmpty()) {
+                        textLine("Applied ${files.size} config file(s):")
+                        files.forEach { file ->
+                            text("  • ")
+                            textLine(file)
+                        }
                     }
-                }
-            }.run()
-        } else {
-            showWarning("⚠ Package installed but configuration failed: ${applyResult.exceptionOrNull()?.message}")
-        }
+                }.run()
+            },
+        )
     } else {
         showSuccess("✓ Package '${bundle.name}' installed successfully!")
     }
@@ -280,22 +285,24 @@ fun Session.installAllMissingPackages(config: FilameConfig) {
     showInfo("Installing missing packages...")
 
     val result = packageManager.installMissingPackages()
-    if (result.isSuccess) {
-        val installed = result.getOrNull() ?: emptyList()
-        section {
-            if (installed.isEmpty()) {
-                green { textLine("✓ All tracked packages are already installed") }
-            } else {
-                green { textLine("✓ Installed ${installed.size} pkg(s):") }
-                installed.forEach { name ->
-                    text("  • ")
-                    textLine(name)
+    result.fold(
+        ifLeft = { err ->
+            showError("Error installing packages: $err")
+        },
+        ifRight = { installed ->
+            section {
+                if (installed.isEmpty()) {
+                    green { textLine("✓ All tracked packages are already installed") }
+                } else {
+                    green { textLine("✓ Installed ${installed.size} pkg(s):") }
+                    installed.forEach { name ->
+                        text("  • ")
+                        textLine(name)
+                    }
                 }
-            }
-        }.run()
-    } else {
-        showError("Error installing packages: ${result.exceptionOrNull()?.message}")
-    }
+            }.run()
+        },
+    )
 }
 
 /**
@@ -313,10 +320,9 @@ fun Session.updateAllPackages(config: FilameConfig) {
     showInfo("Updating all packages... This may take a while.")
 
     val result = packageManager.updatePackages()
-    showConditional(
-        result.isSuccess,
-        "✓ All packages updated successfully!",
-        "Error updating packages: ${result.exceptionOrNull()?.message}",
+    result.fold(
+        ifLeft = { err -> showError("Error updating packages: $err") },
+        ifRight = { showSuccess("✓ All packages updated successfully!") },
     )
 }
 
@@ -340,20 +346,22 @@ fun Session.exportPackageConfigs(config: FilameConfig) {
     val packageManager = PackageManager(config)
     val result = packageManager.exportAllAndPush("Export package configurations")
 
-    if (result.isSuccess) {
-        val (totalExported, metadataExported) = result.getOrNull() ?: (0 to 0)
-        showSuccess("✓ Exported $totalExported configuration file(s)")
-        showSuccess("✓ Exported metadata for $metadataExported pkg bundle(s)")
-    } else {
-        showError(
-            when (val err = (result.exceptionOrNull() as? GitException)?.error) {
-                GitError.RepoNotConfigured -> "GitHub repository not configured. Please configure first."
-                is GitError.IoError -> "I/O error exporting package configurations: ${err.message}"
-                is GitError.GitApi -> "Git error exporting package configurations: ${err.message}"
-                else -> "Error exporting package configurations: ${result.exceptionOrNull()?.message}"
-            },
-        )
-    }
+    result.fold(
+        ifLeft = { err ->
+            showError(
+                when (err) {
+                    GitError.RepoNotConfigured -> "GitHub repository not configured. Please configure first."
+                    is GitError.IoError -> "I/O error exporting package configurations: ${err.message}"
+                    is GitError.GitApi -> "Git error exporting package configurations: ${err.message}"
+                    else -> "Error exporting package configurations: $err"
+                },
+            )
+        },
+        ifRight = { (totalExported, metadataExported) ->
+            showSuccess("✓ Exported $totalExported configuration file(s)")
+            showSuccess("✓ Exported metadata for $metadataExported pkg bundle(s)")
+        },
+    )
 }
 
 /**
@@ -384,12 +392,159 @@ private fun Session.installAURHelper(packageManager: PackageManager): Boolean {
     if (promptYesNo("Install ${aurHelper.command} now? (y/n): ")) {
         showInfo("Installing ${aurHelper.command} now...")
         val installResult = packageManager.installAurHelper(aurHelper)
-        if (installResult.isFailure) {
-            showError("Failed to install ${aurHelper.command}: ${installResult.exceptionOrNull()?.message}")
-            return true
-        }
+        installResult.fold(
+            ifLeft = { err ->
+                showError("Failed to install ${aurHelper.command}: $err")
+                return true
+            },
+            ifRight = {},
+        )
     } else {
         return true
     }
     return false
+}
+
+/**
+ * Search for packages interactively.
+ *
+ * Prompts the user for a search query, searches both official repos and AUR,
+ * and displays the results with source and description.
+ *
+ * @receiver The Kotter session for UI rendering and user input.
+ * @param config The current application configuration.
+ */
+fun Session.searchForPackages(config: FilameConfig) {
+    displayHeader("═══ Search Packages ═══")
+
+    val query = readInput("Enter search query: ")
+
+    if (query.isEmpty()) {
+        showError("Search query cannot be empty.")
+        return
+    }
+
+    val packageManager = PackageManager(config)
+    showInfo("Searching for '$query'...")
+
+    val result = packageManager.searchPackages(query)
+
+    result.fold(
+        ifLeft = { err ->
+            showError("Error searching packages: $err")
+        },
+        ifRight = { results ->
+            if (results.isEmpty()) {
+                showWarning("No packages found matching '$query'")
+            } else {
+                section {
+                    green { textLine("✓ Found ${results.size} package(s):") }
+                    textLine()
+                    results.forEachIndexed { index, pkg ->
+                        white { text("${index + 1}. ") }
+                        cyan { text(pkg.name) }
+                        text(" (${pkg.source})")
+                        textLine()
+                        if (pkg.description.isNotEmpty()) {
+                            text("   ")
+                            textLine(pkg.description)
+                        }
+                    }
+                }.run()
+            }
+        },
+    )
+}
+
+/**
+ * Remove a package interactively.
+ *
+ * Displays tracked packages, prompts the user to select one or enter a package name,
+ * and removes it from the system.
+ *
+ * @receiver The Kotter session for UI rendering and user input.
+ * @param config The current application configuration.
+ * @return The potentially updated configuration (with bundle removed if user confirms).
+ */
+fun Session.removePackageInteractive(config: FilameConfig): FilameConfig {
+    displayHeader("═══ Remove Package ═══")
+
+    val packageManager = PackageManager(config)
+
+    // Show tracked packages if any exist
+    if (config.packageBundles.isNotEmpty()) {
+        section {
+            yellow { textLine("Tracked packages:") }
+            config.packageBundles.forEachIndexed { index, bundle ->
+                text("${index + 1}. ")
+                cyan { text(bundle.name) }
+                text(" (${bundle.source})")
+                if (packageManager.isPackageInstalled(bundle.name)) {
+                    green { text(" [installed]") }
+                } else {
+                    red { text(" [not installed]") }
+                }
+                textLine()
+            }
+            textLine()
+        }.run()
+    }
+
+    val input = readInput("Enter package number or name to remove: ")
+
+    if (input.isEmpty()) {
+        showError("Package selection cannot be empty.")
+        return config
+    }
+
+    // Try to parse as a number first (selecting from tracked packages)
+    val packageName =
+        input.toIntOrNull()?.let { index ->
+            if (index in 1..config.packageBundles.size) {
+                config.packageBundles[index - 1].name
+            } else {
+                showError("Invalid package number.")
+                return config
+            }
+        } ?: input // Otherwise treat as package name
+
+    // Check if package is installed
+    if (!packageManager.isPackageInstalled(packageName)) {
+        showWarning("Package '$packageName' is not installed.")
+        return config
+    }
+
+    // Confirm removal
+    if (!promptYesNo("Remove package '$packageName' from the system? (y/n): ")) {
+        showInfo("Package removal cancelled.")
+        return config
+    }
+
+    showInfo("Removing package $packageName...")
+    val result = packageManager.removePackage(packageName)
+
+    result.fold(
+        ifLeft = { err ->
+            showError("Error removing package: $err")
+        },
+        ifRight = {
+            showSuccess("✓ Package '$packageName' removed successfully!")
+
+            // Ask if user wants to remove from tracked bundles
+            val bundle = config.packageBundles.find { it.name == packageName }
+            if (bundle != null) {
+                if (promptYesNo("Also remove '$packageName' from tracked bundles? (y/n): ")) {
+                    val newConfig =
+                        config.copy(
+                            packageBundles = config.packageBundles.filter { it.name != packageName },
+                        )
+                    saveConfig(newConfig)
+                    showSuccess("✓ Removed from tracked bundles")
+                    return newConfig
+                }
+            }
+        },
+    )
+
+    return config
 }

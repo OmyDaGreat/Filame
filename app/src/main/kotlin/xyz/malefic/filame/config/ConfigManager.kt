@@ -1,6 +1,9 @@
 package xyz.malefic.filame.config
 
+import arrow.core.Either
+import arrow.core.raise.either
 import com.charleskorn.kaml.Yaml
+import xyz.malefic.filame.git.GitError
 import xyz.malefic.filame.git.prepareGitRepo
 import xyz.malefic.filame.pkg.PackageManager
 import java.io.File
@@ -13,7 +16,7 @@ import java.io.File
  * - Updating configuration settings
  * - Scanning Git repositories for package bundles
  *
- * All functions return [Result] types to allow the UI layer to handle errors appropriately.
+ * All functions return [Either] types to allow the UI layer to handle errors appropriately.
  */
 object ConfigManager {
     /** Directory under the user's home where Filame stores configuration (for example `~/.config/filame`). */
@@ -40,21 +43,18 @@ object ConfigManager {
      * Reads and deserializes the YAML configuration file if it exists, otherwise
      * returns a new default [FilameConfig] instance.
      *
-     * @return A [Result] containing the loaded or default configuration, or a failure
-     *         with the exception if deserialization fails.
+     * @return An [Either] containing the loaded or default configuration on the right, or a failure
+     *         message on the left if deserialization fails.
      */
-    fun loadOrCreateConfig(): Result<FilameConfig> =
-        if (configFile.exists()) {
-            try {
+    fun loadOrCreateConfig(): Either<String, FilameConfig> =
+        either<Throwable, FilameConfig> {
+            if (configFile.exists()) {
                 val yaml = configFile.readText()
-                val config = Yaml.default.decodeFromString(FilameConfig.serializer(), yaml)
-                Result.success(config)
-            } catch (e: Exception) {
-                Result.failure(e)
+                Yaml.default.decodeFromString(FilameConfig.serializer(), yaml)
+            } else {
+                FilameConfig()
             }
-        } else {
-            Result.success(FilameConfig())
-        }
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Save configuration to file.
@@ -62,16 +62,13 @@ object ConfigManager {
      * Serializes the configuration to YAML format and writes it to the config file.
      *
      * @param config The configuration to save.
-     * @return A [Result] indicating success or failure with the exception.
+     * @return An [Either] indicating success or failure with error message.
      */
-    fun saveConfig(config: FilameConfig): Result<Unit> =
-        try {
+    fun saveConfig(config: FilameConfig): Either<String, Unit> =
+        either<Throwable, Unit> {
             val yaml = Yaml.default.encodeToString(FilameConfig.serializer(), config)
             configFile.writeText(yaml)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Update device and repository settings in the configuration.
@@ -87,11 +84,10 @@ object ConfigManager {
         config: FilameConfig,
         deviceName: String,
         githubRepo: String,
-    ): FilameConfig =
-        config.copy(
-            deviceName = deviceName,
-            githubRepo = githubRepo,
-        )
+    ) = config.copy(
+        deviceName = deviceName,
+        githubRepo = githubRepo,
+    )
 
     /**
      * Scan the Git repository for package bundles.
@@ -101,31 +97,19 @@ object ConfigManager {
      * repository is automatically closed after the operation.
      *
      * @param config The current configuration containing the GitHub repository URL.
-     * @return A [Result] containing the updated configuration with discovered packages,
-     *         or a failure if the repository is not configured or scanning fails.
+     * @return An [Either] containing the updated configuration with discovered packages on the right,
+     *         or a [GitError] on the left if the repository is not configured or scanning fails.
      */
-    fun scanRepoForPackages(config: FilameConfig): Result<FilameConfig> {
-        if (config.githubRepo.isEmpty()) {
-            return Result.failure(IllegalStateException("GitHub repository not configured"))
+    fun scanRepoForPackages(config: FilameConfig): Either<GitError, FilameConfig> =
+        either {
+            val (_, git) = config.prepareGitRepo().bind()
+
+            val packageManager = PackageManager(config)
+            val bundles =
+                git.use { _ ->
+                    packageManager.scanRepoForPackages().mapLeft { GitError.IoError(it) }.bind()
+                }
+
+            config.copy(packageBundles = bundles)
         }
-
-        val prep = config.prepareGitRepo()
-        if (prep.isFailure) {
-            return Result.failure(prep.exceptionOrNull() ?: Exception("Failed to prepare git repo"))
-        }
-
-        val (_, git) = prep.getOrThrow()
-
-        val packageManager = PackageManager(config)
-        val scanResult = packageManager.scanRepoForPackages()
-
-        git.close()
-
-        return if (scanResult.isSuccess) {
-            val bundles = scanResult.getOrNull() ?: emptyList()
-            Result.success(config.copy(packageBundles = bundles))
-        } else {
-            Result.failure(scanResult.exceptionOrNull() ?: Exception("Failed to scan repository"))
-        }
-    }
 }

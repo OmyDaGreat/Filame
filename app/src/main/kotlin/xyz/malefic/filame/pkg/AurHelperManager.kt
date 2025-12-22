@@ -1,5 +1,8 @@
 package xyz.malefic.filame.pkg
 
+import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import java.io.File
 
 /**
@@ -68,17 +71,17 @@ object AurHelperManager {
      * need installation.
      *
      * @param helper The AUR helper to install.
-     * @return `Result.success(Unit)` on successful installation, or `Result.failure` with
-     *         an exception describing the failure.
+     * @return `Either.Right(Unit)` on successful installation, or `Either.Left` with
+     *         an error message describing the failure.
      *
      * @throws SecurityException If the runtime environment prevents executing the required
      *         external commands. Exceptions thrown by process execution are captured and
-     *         returned as `Result.failure`.
+     *         returned as `Either.Left`.
      */
-    fun install(helper: AurHelper): Result<Unit> {
-        return try {
+    fun install(helper: AurHelper): Either<String, Unit> =
+        either<Throwable, Unit> {
             if (isInstalled(helper)) {
-                return Result.success(Unit)
+                return@either
             }
 
             // Install dependencies
@@ -91,8 +94,8 @@ object AurHelperManager {
                             .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                             .redirectError(ProcessBuilder.Redirect.INHERIT)
                             .start()
-                    if (installProcess.waitFor() != 0) {
-                        return Result.failure(Exception("Failed to install $dep"))
+                    ensure(installProcess.waitFor() == 0) {
+                        raise(Exception("Failed to install $dep"))
                     }
                 }
             }
@@ -110,7 +113,7 @@ object AurHelperManager {
 
             if (cloneProcess.waitFor() != 0) {
                 tmpDir.deleteRecursively()
-                return Result.failure(Exception("Failed to clone ${helper.command} repository"))
+                raise(Exception("Failed to clone ${helper.command} repository"))
             }
 
             val helperDir = File(tmpDir, helper.command)
@@ -124,13 +127,8 @@ object AurHelperManager {
             val exitCode = buildProcess.waitFor()
             tmpDir.deleteRecursively()
 
-            if (exitCode != 0) {
-                return Result.failure(Exception("Failed to build and install ${helper.command}"))
+            ensure(exitCode == 0) {
+                raise(Exception("Failed to build and install ${helper.command}"))
             }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+        }.mapLeft { it.message ?: "Unknown error" }
 }

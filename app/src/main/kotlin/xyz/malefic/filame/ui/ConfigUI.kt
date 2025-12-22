@@ -1,5 +1,6 @@
 package xyz.malefic.filame.ui
 
+import arrow.core.getOrElse
 import com.varabyte.kotter.foundation.text.cyan
 import com.varabyte.kotter.foundation.text.green
 import com.varabyte.kotter.foundation.text.text
@@ -8,7 +9,6 @@ import com.varabyte.kotter.runtime.Session
 import xyz.malefic.filame.config.ConfigManager
 import xyz.malefic.filame.config.FilameConfig
 import xyz.malefic.filame.git.GitError
-import xyz.malefic.filame.git.GitException
 
 /**
  * Load existing configuration from disk or create a new default one.
@@ -21,10 +21,8 @@ import xyz.malefic.filame.git.GitException
  */
 fun Session.loadOrCreateConfig(): FilameConfig {
     val result = ConfigManager.loadOrCreateConfig()
-    return if (result.isSuccess) {
-        result.getOrThrow()
-    } else {
-        showError("Error loading configuration: ${result.exceptionOrNull()?.message}")
+    return result.getOrElse { err ->
+        showError("Error loading configuration: $err")
         FilameConfig()
     }
 }
@@ -39,13 +37,10 @@ fun Session.loadOrCreateConfig(): FilameConfig {
  * @param config The configuration to save.
  */
 fun Session.saveConfig(config: FilameConfig) {
-    ConfigManager.saveConfig(config).apply {
-        showConditional(
-            this.isSuccess,
-            "Configuration saved successfully!",
-            "Error saving configuration: ${this.exceptionOrNull()?.message}",
-        )
-    }
+    ConfigManager.saveConfig(config).fold(
+        ifLeft = { err -> showError("Error saving configuration: $err") },
+        ifRight = { showSuccess("Configuration saved successfully!") },
+    )
 }
 
 /**
@@ -89,44 +84,34 @@ fun Session.scanRepoForPackages(config: FilameConfig): FilameConfig {
 
     val result = ConfigManager.scanRepoForPackages(config)
 
-    return if (result.isSuccess) {
-        val newConfig = result.getOrThrow()
-        saveConfig(newConfig)
+    return result.fold(
+        ifLeft = { err ->
+            showError(
+                when (err) {
+                    GitError.RepoNotConfigured -> "GitHub repository not configured. Please configure first."
+                    is GitError.IoError -> "I/O error preparing repository: ${err.message}"
+                    is GitError.GitApi -> "Git error preparing repository: ${err.message}"
+                    else -> "Error scanning repository: $err"
+                },
+            )
+            config
+        },
+        ifRight = { newConfig ->
+            saveConfig(newConfig)
 
-        section {
-            green { textLine("✓ Found ${newConfig.packageBundles.size} package bundle(s)") }
-            newConfig.packageBundles.forEach { bundle ->
-                text("  • ")
-                cyan { text(bundle.name) }
-                text(" (${bundle.source})")
-                if (bundle.configFiles.isNotEmpty()) {
-                    text(" - ${bundle.configFiles.size} config file(s)")
-                }
-                textLine()
-            }
-        }.run()
-        newConfig
-    } else {
-        showError(
-            when (val ex = result.exceptionOrNull()) {
-                is IllegalStateException -> {
-                    "GitHub repository not configured. Please configure first."
-                }
-
-                is GitException -> {
-                    when (val err = ex.error) {
-                        GitError.RepoNotConfigured -> "GitHub repository not configured. Please configure first."
-                        is GitError.IoError -> "I/O error preparing repository: ${err.message}"
-                        is GitError.GitApi -> "Git error preparing repository: ${err.message}"
-                        else -> "Error scanning repository: ${ex.message}"
+            section {
+                green { textLine("✓ Found ${newConfig.packageBundles.size} package bundle(s)") }
+                newConfig.packageBundles.forEach { bundle ->
+                    text("  • ")
+                    cyan { text(bundle.name) }
+                    text(" (${bundle.source})")
+                    if (bundle.configFiles.isNotEmpty()) {
+                        text(" - ${bundle.configFiles.size} config file(s)")
                     }
+                    textLine()
                 }
-
-                else -> {
-                    "Error scanning repository: ${ex?.message}"
-                }
-            },
-        )
-        config
-    }
+            }.run()
+            newConfig
+        },
+    )
 }

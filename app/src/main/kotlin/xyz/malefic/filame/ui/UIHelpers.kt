@@ -9,6 +9,7 @@ import com.varabyte.kotter.foundation.text.green
 import com.varabyte.kotter.foundation.text.red
 import com.varabyte.kotter.foundation.text.text
 import com.varabyte.kotter.foundation.text.textLine
+import com.varabyte.kotter.foundation.text.white
 import com.varabyte.kotter.foundation.text.yellow
 import com.varabyte.kotter.runtime.Session
 
@@ -106,27 +107,6 @@ fun Session.showError(message: String) = section { red { textLine(message) } }.r
 fun Session.showSuccess(message: String) = section { green { textLine(message) } }.run()
 
 /**
- * Show either a success or an error message based on a condition.
- *
- * If [condition] is true, displays [success] via [showSuccess], otherwise
- * displays [failure] via [showError].
- *
- * @receiver The session used to render the message.
- * @param condition Condition determining which message to show.
- * @param success Message shown when [condition] is true.
- * @param failure Message shown when [condition] is false.
- */
-fun Session.showConditional(
-    condition: Boolean,
-    success: String,
-    failure: String,
-) = if (condition) {
-    showSuccess(success)
-} else {
-    showError(failure)
-}
-
-/**
  * Common completions for yes/no prompts
  */
 val yesNoCompletions = Completions("y", "n", "yes", "no")
@@ -146,4 +126,79 @@ fun Session.promptCredentials(): Pair<String, String> {
     val username = readInput("Enter Git username: ").trim()
     val token = readInput("Enter personal access token: ").trim()
     return username to token
+}
+
+/**
+ * Display help information showing all available commands and their descriptions.
+ */
+fun Session.showHelp() {
+    section {
+        cyan { textLine("═══ FILAME - Help ═══") }
+        textLine()
+        green { textLine("Available Commands:") }
+        textLine()
+
+        white { text("  c, configure") }
+        textLine(" - Configure device name and GitHub repository")
+
+        white { text("  s, scan") }
+        textLine("      - Scan repository for package bundles")
+
+        white { text("  l, list") }
+        textLine("      - List all tracked package bundles")
+
+        white { text("  a, add") }
+        textLine("       - Add or edit a package bundle")
+
+        white { text("  i, install") }
+        textLine("   - Install a package and apply its configuration")
+
+        white { text("  m, missing") }
+        textLine("   - Install all missing tracked packages")
+
+        white { text("  u, update") }
+        textLine("    - Update all system packages (official + AUR)")
+
+        white { text("  e, export") }
+        textLine("    - Export package configurations to repository")
+
+        white { text("  g, git, sync") }
+        textLine(" - Sync with GitHub (pull/push)")
+
+        white { text("  f, find, search") }
+        textLine(" - Search for packages in repos and AUR")
+
+        white { text("  r, remove") }
+        textLine("    - Remove an installed package")
+
+        white { text("  h, help") }
+        textLine("     - Show this help message")
+
+        white { text("  q, quit, exit") }
+        textLine(" - Exit the application")
+
+        textLine()
+        yellow { textLine("Usage:") }
+        text("  ")
+        cyan { text("filame") }
+        textLine("              - Start interactive menu")
+
+        text("  ")
+        cyan { text("filame <command>") }
+        textLine("   - Run a specific command directly")
+
+        textLine()
+        yellow { textLine("Examples:") }
+        text("  ")
+        cyan { text("filame search") }
+        textLine("       - Search for packages")
+
+        text("  ")
+        cyan { text("filame sync") }
+        textLine("         - Sync with GitHub")
+
+        text("  ")
+        cyan { text("filame install") }
+        textLine("      - Install a package")
+    }.run()
 }

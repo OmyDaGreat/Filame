@@ -7,7 +7,6 @@ import com.varabyte.kotter.foundation.text.yellow
 import com.varabyte.kotter.runtime.Session
 import xyz.malefic.filame.config.FilameConfig
 import xyz.malefic.filame.git.GitError
-import xyz.malefic.filame.git.GitException
 import xyz.malefic.filame.git.GitManager
 
 /**
@@ -71,19 +70,21 @@ fun Session.syncPull(config: FilameConfig): FilameConfig {
     val gitManager = GitManager(config)
     val pullResult = gitManager.syncPull()
 
-    if (pullResult.isSuccess) {
-        section {
-            green { textLine("✓ Successfully pulled changes from GitHub") }
-            yellow { textLine("Tip: Use 'Scan repo for packages' to update your pkg list") }
-        }.run()
-    } else {
-        val ex = pullResult.exceptionOrNull() as? GitException
-        when (val err = ex?.error) {
-            GitError.RepoNotConfigured -> showError("GitHub repository not configured. Please configure it in settings.")
-            is GitError.PullFailed -> showError("Error pulling from GitHub: ${err.message}")
-            else -> showError("Error pulling from GitHub: ${err ?: pullResult.exceptionOrNull()?.message}")
-        }
-    }
+    pullResult.fold(
+        ifLeft = { err ->
+            when (err) {
+                GitError.RepoNotConfigured -> showError("GitHub repository not configured. Please configure it in settings.")
+                is GitError.PullFailed -> showError("Error pulling from GitHub: ${err.message}")
+                else -> showError("Error pulling from GitHub: $err")
+            }
+        },
+        ifRight = {
+            section {
+                green { textLine("✓ Successfully pulled changes from GitHub") }
+                yellow { textLine("Tip: Use 'Scan repo for packages' to update your pkg list") }
+            }.run()
+        },
+    )
 
     return config
 }
@@ -117,35 +118,36 @@ fun Session.syncPush(config: FilameConfig): FilameConfig {
             saveCredentialsIfUsed = true,
         )
 
-    if (result.isSuccess) {
-        showSuccess("✓ Successfully pushed changes to GitHub")
-        return config
-    }
+    result.fold(
+        ifLeft = { err ->
+            when (err) {
+                GitError.RepoNotConfigured -> {
+                    showError("GitHub repository not configured. Please configure it in settings.")
+                }
 
-    val ex = result.exceptionOrNull() as? GitException
-    when (val err = ex?.error) {
-        GitError.RepoNotConfigured -> {
-            showError("GitHub repository not configured. Please configure it in settings.")
-        }
+                is GitError.CommitFailed -> {
+                    showError("Error committing: ${err.message}")
+                }
 
-        is GitError.CommitFailed -> {
-            showError("Error committing: ${err.message}")
-        }
+                is GitError.SaveCredentialsFailed -> {
+                    showSuccess("✓ Successfully pushed changes to GitHub with provided credentials")
+                    showError("Warning: ${err.message}")
+                }
 
-        is GitError.SaveCredentialsFailed -> {
-            showSuccess("✓ Successfully pushed changes to GitHub with provided credentials")
-            showError("Warning: ${err.message}")
-        }
+                is GitError.PushFailed -> {
+                    showError("Error pushing to GitHub: ${err.message}")
+                    showError("Ensure the token has repo permissions and the username/token are correct")
+                }
 
-        is GitError.PushFailed -> {
-            showError("Error pushing to GitHub: ${err.message}")
-            showError("Ensure the token has repo permissions and the username/token are correct")
-        }
-
-        else -> {
-            showError("Error during push: ${err?.toString() ?: result.exceptionOrNull()?.message}")
-        }
-    }
+                else -> {
+                    showError("Error during push: $err")
+                }
+            }
+        },
+        ifRight = {
+            showSuccess("✓ Successfully pushed changes to GitHub")
+        },
+    )
 
     return config
 }

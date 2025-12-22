@@ -1,11 +1,13 @@
 package xyz.malefic.filame.pkg
 
+import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import com.charleskorn.kaml.Yaml
 import xyz.malefic.filame.config.ConfigFile
 import xyz.malefic.filame.config.FilameConfig
 import xyz.malefic.filame.config.PackageBundle
 import xyz.malefic.filame.git.GitError
-import xyz.malefic.filame.git.GitException
 import xyz.malefic.filame.git.GitManager
 import xyz.malefic.filame.git.prepareGitRepo
 import java.io.BufferedReader
@@ -39,8 +41,8 @@ class PackageManager(
     /**
      * Search for packages in official repos and AUR
      */
-    fun searchPackages(query: String): Result<List<PackageSearchResult>> =
-        try {
+    fun searchPackages(query: String): Either<String, List<PackageSearchResult>> =
+        either<Throwable, List<PackageSearchResult>> {
             val results = mutableListOf<PackageSearchResult>()
 
             // Search official repos with pacman
@@ -104,10 +106,8 @@ class PackageManager(
                 aurProcess.waitFor()
             }
 
-            Result.success(results)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+            results
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Check if a package is installed
@@ -131,15 +131,14 @@ class PackageManager(
     /**
      * Install a package
      */
-    fun installPackage(pkg: PackageBundle): Result<Unit> {
-        return try {
+    fun installPackage(pkg: PackageBundle): Either<String, Unit> =
+        either<Throwable, Unit> {
             val command =
                 if (pkg.source == "aur") {
-                    val aurHelper =
-                        getAurHelper()
-                            ?: return Result.failure(
-                                Exception("An AUR helper (yay or paru) is required for AUR packages but not installed"),
-                            )
+                    val aurHelper = getAurHelper()
+                    ensure(aurHelper != null) {
+                        raise(Exception("An AUR helper (yay or paru) is required for AUR packages but not installed"))
+                    }
                     arrayOf(aurHelper.command, "-S", "--noconfirm", pkg.name)
                 } else {
                     arrayOf("sudo", "pacman", "-S", "--noconfirm", pkg.name)
@@ -153,43 +152,36 @@ class PackageManager(
 
             val exitCode = process.waitFor()
 
-            if (exitCode != 0) {
-                Result.failure(Exception("Failed to install package ${pkg.name}"))
-            } else {
-                Result.success(Unit)
+            ensure(exitCode == 0) {
+                raise(Exception("Failed to install package ${pkg.name}"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Install all tracked packages that are not yet installed
      */
-    fun installMissingPackages(): Result<List<String>> {
-        val installed = mutableListOf<String>()
-        val statuses = getPackageStatuses()
+    fun installMissingPackages(): Either<String, List<String>> =
+        either {
+            val installed = mutableListOf<String>()
+            val statuses = getPackageStatuses()
 
-        for ((pkg, isInstalled) in statuses) {
-            if (!isInstalled) {
-                val result = installPackage(pkg)
-                if (result.isSuccess) {
+            for ((pkg, isInstalled) in statuses) {
+                if (!isInstalled) {
+                    installPackage(pkg).bind()
                     installed.add(pkg.name)
-                } else {
-                    return Result.failure(result.exceptionOrNull()!!)
                 }
             }
-        }
 
-        return Result.success(installed)
-    }
+            installed
+        }
 
     /**
      * Apply configuration files for a package bundle
      */
-    fun applyPackageConfig(bundle: PackageBundle): Result<List<String>> {
-        val appliedFiles = mutableListOf<String>()
-        try {
+    fun applyPackageConfig(bundle: PackageBundle): Either<String, List<String>> =
+        either<Throwable, List<String>> {
+            val appliedFiles = mutableListOf<String>()
+
             for (configFile in bundle.configFiles) {
                 val source = File(repoDir, configFile.destinationPath)
                 if (!source.exists()) {
@@ -206,18 +198,17 @@ class PackageManager(
                 )
                 appliedFiles.add(configFile.sourcePath)
             }
-            return Result.success(appliedFiles)
-        } catch (e: Exception) {
-            return Result.failure(e)
-        }
-    }
+
+            appliedFiles
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Export configuration files for a package bundle to repo
      */
-    fun exportPackageConfig(bundle: PackageBundle): Result<List<String>> {
-        val exportedFiles = mutableListOf<String>()
-        try {
+    fun exportPackageConfig(bundle: PackageBundle): Either<String, List<String>> =
+        either<Throwable, List<String>> {
+            val exportedFiles = mutableListOf<String>()
+
             for (configFile in bundle.configFiles) {
                 val source = File(configFile.sourcePath)
                 if (!source.exists()) {
@@ -234,18 +225,16 @@ class PackageManager(
                 )
                 exportedFiles.add(configFile.destinationPath)
             }
-            return Result.success(exportedFiles)
-        } catch (e: Exception) {
-            return Result.failure(e)
-        }
-    }
+
+            exportedFiles
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Export package bundle metadata to repo as package.yaml
      * This enables two-way sync of package configurations
      */
-    fun exportPackageMetadata(bundle: PackageBundle): Result<String> =
-        try {
+    fun exportPackageMetadata(bundle: PackageBundle): Either<String, String> =
+        either<Throwable, String> {
             // Determine the package directory name from config files or use the package name
             val packageDirName =
                 if (bundle.configFiles.isNotEmpty()) {
@@ -267,56 +256,31 @@ class PackageManager(
                 )
             metadataFile.writeText(yaml)
 
-            Result.success(metadataFile.relativeTo(repoDir).path)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+            metadataFile.relativeTo(repoDir).path
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * High-level: export bundle's config files + metadata and push to remote.
-     * This function is UI-agnostic and returns a Result so callers can present errors.
      */
     fun exportBundleAndPush(
         bundle: PackageBundle,
         commitMessage: String,
         credentialProvider: (() -> Pair<String, String>?)? = null,
         saveCredentialsIfUsed: Boolean = true,
-    ): Result<Unit> {
-        // Prepare repo (clone/open)
-        val prep = config.prepareGitRepo()
-        if (prep.isFailure) {
-            return Result.failure(
-                prep.exceptionOrNull() as? GitException
-                    ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
-            )
-        }
-
-        val (gitManager, git) = prep.getOrThrow()
-        try {
-            val exportConfigs = exportPackageConfig(bundle)
-            if (exportConfigs.isFailure) {
-                val cause = exportConfigs.exceptionOrNull()
-                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export config files"), cause))
-            }
-
-            val exportMeta = exportPackageMetadata(bundle)
-            if (exportMeta.isFailure) {
-                val cause = exportMeta.exceptionOrNull()
-                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export metadata"), cause))
-            }
-
-            // Commit & push using GitManager orchestration (it will handle credential retries via the provider)
-            val pushResult = gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
-            if (pushResult.isFailure) return Result.failure(pushResult.exceptionOrNull()!!)
-
-            return Result.success(Unit)
-        } finally {
+    ): Either<GitError, Unit> =
+        either {
+            val (gitManager, git) = config.prepareGitRepo().bind()
             try {
-                git.close()
-            } catch (_: Exception) {
+                exportPackageConfig(bundle).mapLeft { GitError.IoError(it) }.bind()
+                exportPackageMetadata(bundle).mapLeft { GitError.IoError(it) }.bind()
+                gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+            } finally {
+                try {
+                    git.close()
+                } catch (_: Exception) {
+                }
             }
         }
-    }
 
     /**
      * Export all tracked package configs / metadata and push as a single commit.
@@ -326,48 +290,30 @@ class PackageManager(
         commitMessage: String,
         credentialProvider: (() -> Pair<String, String>?)? = null,
         saveCredentialsIfUsed: Boolean = true,
-    ): Result<Pair<Int, Int>> {
-        val prep = config.prepareGitRepo()
-        if (prep.isFailure) {
-            return Result.failure(
-                prep.exceptionOrNull() as? GitException
-                    ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
-            )
-        }
-
-        val (_, git) = prep.getOrThrow()
-        var totalExported = 0
-        var metadataExported = 0
-        try {
-            for (bundle in config.packageBundles) {
-                val exportResult = exportPackageConfig(bundle)
-                if (exportResult.isSuccess) {
-                    totalExported += exportResult.getOrNull()?.size ?: 0
-                } else {
-                    val cause = exportResult.exceptionOrNull()
-                    return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export config files"), cause))
-                }
-
-                val metaResult = exportPackageMetadata(bundle)
-                if (metaResult.isSuccess) {
-                    metadataExported++
-                } else {
-                    val cause = metaResult.exceptionOrNull()
-                    return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export metadata"), cause))
-                }
-            }
-
-            val pushResult = GitManager(config).pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
-            if (pushResult.isFailure) return Result.failure(pushResult.exceptionOrNull()!!)
-
-            return Result.success(totalExported to metadataExported)
-        } finally {
+    ): Either<GitError, Pair<Int, Int>> =
+        either {
+            val (_, git) = config.prepareGitRepo().bind()
+            var totalExported = 0
+            var metadataExported = 0
             try {
-                git.close()
-            } catch (_: Exception) {
+                for (bundle in config.packageBundles) {
+                    val exported = exportPackageConfig(bundle).mapLeft { GitError.IoError(it) }.bind()
+                    totalExported += exported.size
+
+                    exportPackageMetadata(bundle).mapLeft { GitError.IoError(it) }.bind()
+                    metadataExported++
+                }
+
+                GitManager(config).pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+
+                totalExported to metadataExported
+            } finally {
+                try {
+                    git.close()
+                } catch (_: Exception) {
+                }
             }
         }
-    }
 
     /**
      * Export a single bundle (configs + metadata), push to remote, and return the metadata file path relative to the repo.
@@ -378,53 +324,32 @@ class PackageManager(
         commitMessage: String,
         credentialProvider: (() -> Pair<String, String>?)? = null,
         saveCredentialsIfUsed: Boolean = true,
-    ): Result<String> {
-        val prep = config.prepareGitRepo()
-        if (prep.isFailure) {
-            val ex = prep.exceptionOrNull() as? GitException
-            return Result.failure(
-                ex ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
-            )
-        }
-
-        val (gitManager, git) = prep.getOrThrow()
-        try {
-            val exportConfigs = exportPackageConfig(bundle)
-            if (exportConfigs.isFailure) {
-                val cause = exportConfigs.exceptionOrNull()
-                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export config files"), cause))
-            }
-
-            val exportMeta = exportPackageMetadata(bundle)
-            if (exportMeta.isFailure) {
-                val cause = exportMeta.exceptionOrNull()
-                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export metadata"), cause))
-            }
-
-            val metadataPath = exportMeta.getOrThrow()
-
-            val pushResult = gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
-            if (pushResult.isFailure) return Result.failure(pushResult.exceptionOrNull()!!)
-
-            return Result.success(metadataPath)
-        } finally {
+    ): Either<GitError, String> =
+        either {
+            val (gitManager, git) = config.prepareGitRepo().bind()
             try {
-                git.close()
-            } catch (_: Exception) {
+                exportPackageConfig(bundle).mapLeft { GitError.IoError(it) }.bind()
+                val metadataPath = exportPackageMetadata(bundle).mapLeft { GitError.IoError(it) }.bind()
+                gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+                metadataPath
+            } finally {
+                try {
+                    git.close()
+                } catch (_: Exception) {
+                }
             }
         }
-    }
 
     /**
      * Scan repository directory for package bundles
      * Looks for directories with package metadata and config files
      */
-    fun scanRepoForPackages(): Result<List<PackageBundle>> {
-        return try {
+    fun scanRepoForPackages(): Either<String, List<PackageBundle>> =
+        either<Throwable, List<PackageBundle>> {
             val bundles = mutableListOf<PackageBundle>()
 
             if (!repoDir.exists()) {
-                return Result.success(emptyList())
+                return@either emptyList()
             }
 
             // Look for package directories (each subdirectory is a potential package)
@@ -473,17 +398,14 @@ class PackageManager(
                 }
             }
 
-            Result.success(bundles)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+            bundles
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Update all installed packages
      */
-    fun updatePackages(): Result<Unit> {
-        return try {
+    fun updatePackages(): Either<String, Unit> =
+        either<Throwable, Unit> {
             // Update official packages
             val pacmanProcess =
                 ProcessBuilder("sudo", "pacman", "-Syu", "--noconfirm")
@@ -491,8 +413,8 @@ class PackageManager(
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .start()
 
-            if (pacmanProcess.waitFor() != 0) {
-                return Result.failure(Exception("Failed to update official packages"))
+            ensure(pacmanProcess.waitFor() == 0) {
+                raise(Exception("Failed to update official packages"))
             }
 
             // Update AUR packages if yay or paru is installed
@@ -504,22 +426,17 @@ class PackageManager(
                         .redirectError(ProcessBuilder.Redirect.INHERIT)
                         .start()
 
-                if (aurProcess.waitFor() != 0) {
-                    return Result.failure(Exception("Failed to update AUR packages"))
+                ensure(aurProcess.waitFor() == 0) {
+                    raise(Exception("Failed to update AUR packages"))
                 }
             }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Remove a package
      */
-    fun removePackage(packageName: String): Result<Unit> =
-        try {
+    fun removePackage(packageName: String): Either<String, Unit> =
+        either<Throwable, Unit> {
             val process =
                 ProcessBuilder("sudo", "pacman", "-R", "--noconfirm", packageName)
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT)
@@ -528,12 +445,8 @@ class PackageManager(
 
             val exitCode = process.waitFor()
 
-            if (exitCode != 0) {
-                Result.failure(Exception("Failed to remove package $packageName"))
-            } else {
-                Result.success(Unit)
+            ensure(exitCode == 0) {
+                raise(Exception("Failed to remove package $packageName"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        }.mapLeft { it.message ?: "Unknown error" }
 }
