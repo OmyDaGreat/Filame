@@ -1,9 +1,13 @@
-package xyz.malefic.filame.`package`
+package xyz.malefic.filame.pkg
 
 import com.charleskorn.kaml.Yaml
 import xyz.malefic.filame.config.ConfigFile
 import xyz.malefic.filame.config.FilameConfig
 import xyz.malefic.filame.config.PackageBundle
+import xyz.malefic.filame.git.GitError
+import xyz.malefic.filame.git.GitException
+import xyz.malefic.filame.git.GitManager
+import xyz.malefic.filame.git.prepareGitRepo
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -17,11 +21,6 @@ class PackageManager(
     private val config: FilameConfig,
     private val repoDir: File = File(System.getProperty("user.home"), ".config/filame/repo"),
 ) {
-    /**
-     * Check if a specific AUR helper is installed
-     */
-    fun isAurHelperInstalled(helper: AurHelper) = AurHelperManager.isInstalled(helper)
-
     /**
      * Check if any AUR helper is installed
      */
@@ -272,6 +271,150 @@ class PackageManager(
         } catch (e: Exception) {
             Result.failure(e)
         }
+
+    /**
+     * High-level: export bundle's config files + metadata and push to remote.
+     * This function is UI-agnostic and returns a Result so callers can present errors.
+     */
+    fun exportBundleAndPush(
+        bundle: PackageBundle,
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Result<Unit> {
+        // Prepare repo (clone/open)
+        val prep = config.prepareGitRepo()
+        if (prep.isFailure) {
+            // propagate existing GitException or wrap
+            val ex = prep.exceptionOrNull() as? GitException
+            return Result.failure(
+                ex ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
+            )
+        }
+
+        val (gitManager, git) = prep.getOrThrow()
+        try {
+            val exportConfigs = exportPackageConfig(bundle)
+            if (exportConfigs.isFailure) {
+                val cause = exportConfigs.exceptionOrNull()
+                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export config files"), cause))
+            }
+
+            val exportMeta = exportPackageMetadata(bundle)
+            if (exportMeta.isFailure) {
+                val cause = exportMeta.exceptionOrNull()
+                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export metadata"), cause))
+            }
+
+            // Commit & push using GitManager orchestration (it will handle credential retries via the provider)
+            val pushResult = gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
+            if (pushResult.isFailure) return Result.failure(pushResult.exceptionOrNull()!!)
+
+            return Result.success(Unit)
+        } finally {
+            try {
+                git.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
+     * Export all tracked package configs / metadata and push as a single commit.
+     * Returns a Pair(totalConfigFilesExported, metadataBundlesExported) on success.
+     */
+    fun exportAllAndPush(
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Result<Pair<Int, Int>> {
+        val prep = config.prepareGitRepo()
+        if (prep.isFailure) {
+            val ex = prep.exceptionOrNull() as? GitException
+            return Result.failure(
+                ex ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
+            )
+        }
+
+        val (_, git) = prep.getOrThrow()
+        var totalExported = 0
+        var metadataExported = 0
+        try {
+            for (bundle in config.packageBundles) {
+                val exportResult = exportPackageConfig(bundle)
+                if (exportResult.isSuccess) {
+                    totalExported += exportResult.getOrNull()?.size ?: 0
+                } else {
+                    val cause = exportResult.exceptionOrNull()
+                    return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export config files"), cause))
+                }
+
+                val metaResult = exportPackageMetadata(bundle)
+                if (metaResult.isSuccess) {
+                    metadataExported++
+                } else {
+                    val cause = metaResult.exceptionOrNull()
+                    return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export metadata"), cause))
+                }
+            }
+
+            val pushResult = GitManager(config).pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
+            if (pushResult.isFailure) return Result.failure(pushResult.exceptionOrNull()!!)
+
+            return Result.success(totalExported to metadataExported)
+        } finally {
+            try {
+                git.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
+     * Export a single bundle (configs + metadata), push to remote, and return the metadata file path relative to the repo.
+     * This mirrors exportBundleAndPush but returns the metadata path for UI consumption.
+     */
+    fun exportBundleAndPushWithMetadata(
+        bundle: PackageBundle,
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Result<String> {
+        val prep = config.prepareGitRepo()
+        if (prep.isFailure) {
+            val ex = prep.exceptionOrNull() as? GitException
+            return Result.failure(
+                ex ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
+            )
+        }
+
+        val (gitManager, git) = prep.getOrThrow()
+        try {
+            val exportConfigs = exportPackageConfig(bundle)
+            if (exportConfigs.isFailure) {
+                val cause = exportConfigs.exceptionOrNull()
+                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export config files"), cause))
+            }
+
+            val exportMeta = exportPackageMetadata(bundle)
+            if (exportMeta.isFailure) {
+                val cause = exportMeta.exceptionOrNull()
+                return Result.failure(GitException(GitError.IoError(cause?.message ?: "Failed to export metadata"), cause))
+            }
+
+            val metadataPath = exportMeta.getOrThrow()
+
+            val pushResult = gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
+            if (pushResult.isFailure) return Result.failure(pushResult.exceptionOrNull()!!)
+
+            return Result.success(metadataPath)
+        } finally {
+            try {
+                git.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     /**
      * Scan repository directory for package bundles

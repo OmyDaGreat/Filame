@@ -48,12 +48,12 @@ fun Session.showMainMenu(initialConfig: FilameConfig) {
             arrayListOf(
                 "1. Configure settings",
                 "2. Scan repo for packages",
-                "3. List package bundles",
-                "4. Add/Edit package bundle",
-                "5. Install package & apply config",
+                "3. List pkg bundles",
+                "4. Add/Edit pkg bundle",
+                "5. Install pkg & apply config",
                 "6. Install all missing packages",
                 "7. Update all packages",
-                "8. Export package configs to repo",
+                "8. Export pkg configs to repo",
                 "9. Sync with GitHub",
                 "0. Exit",
             ).forEachIndexed { i, line ->
@@ -183,8 +183,6 @@ fun Session.showMainMenu(initialConfig: FilameConfig) {
                             0 -> {
                                 exit = true
                             }
-
-                            else -> { /* no-op */ }
                         }
                     }
                 }

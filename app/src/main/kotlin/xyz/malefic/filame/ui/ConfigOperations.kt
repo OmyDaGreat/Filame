@@ -1,50 +1,40 @@
 package xyz.malefic.filame.ui
 
-import com.charleskorn.kaml.Yaml
 import com.varabyte.kotter.foundation.text.cyan
 import com.varabyte.kotter.foundation.text.green
-import com.varabyte.kotter.foundation.text.red
 import com.varabyte.kotter.foundation.text.text
 import com.varabyte.kotter.foundation.text.textLine
 import com.varabyte.kotter.runtime.Session
-import xyz.malefic.filame.config.ConfigManager.configFile
+import xyz.malefic.filame.config.ConfigManager
 import xyz.malefic.filame.config.FilameConfig
-import xyz.malefic.filame.git.GitManager
-import xyz.malefic.filame.`package`.PackageManager
+import xyz.malefic.filame.git.GitError
+import xyz.malefic.filame.git.GitException
 
 /**
  * Load existing config or create a new one
  */
-fun Session.loadOrCreateConfig(): FilameConfig =
-    if (configFile.exists()) {
-        try {
-            val yaml = configFile.readText()
-            Yaml.default.decodeFromString(FilameConfig.serializer(), yaml)
-        } catch (e: Exception) {
-            section {
-                red { textLine("Error loading config: ${e.message}") }
-            }.run()
-            FilameConfig()
-        }
+fun Session.loadOrCreateConfig(): FilameConfig {
+    val result = ConfigManager.loadOrCreateConfig()
+    return if (result.isSuccess) {
+        result.getOrThrow()
     } else {
+        showError("Error loading configuration: ${result.exceptionOrNull()?.message}")
         FilameConfig()
     }
+}
 
 /**
  * Save configuration to file
  */
-fun Session.saveConfig(config: FilameConfig) =
-    try {
-        val yaml = Yaml.default.encodeToString(FilameConfig.serializer(), config)
-        configFile.writeText(yaml)
-        section {
-            green { textLine("Configuration saved successfully!") }
-        }.run()
-    } catch (e: Exception) {
-        section {
-            red { textLine("Error saving config: ${e.message}") }
-        }.run()
+fun Session.saveConfig(config: FilameConfig) {
+    ConfigManager.saveConfig(config).apply {
+        showConditional(
+            this.isSuccess,
+            "Configuration saved successfully!",
+            "Error saving configuration: ${this.exceptionOrNull()?.message}",
+        )
     }
+}
 
 /**
  * Configure device and repository settings
@@ -56,11 +46,7 @@ fun Session.configureSettings(config: FilameConfig): FilameConfig {
 
     val githubRepo = readInput("Enter GitHub repository URL (current: ${config.githubRepo}): ").ifEmpty { config.githubRepo }
 
-    val newConfig =
-        config.copy(
-            deviceName = deviceName,
-            githubRepo = githubRepo,
-        )
+    val newConfig = ConfigManager.updateSettings(config, deviceName, githubRepo)
 
     saveConfig(newConfig)
 
@@ -68,43 +54,24 @@ fun Session.configureSettings(config: FilameConfig): FilameConfig {
 }
 
 /**
- * Scan repository for package bundles
+ * Scan repository for pkg bundles
  */
 fun Session.scanRepoForPackages(config: FilameConfig): FilameConfig {
     displayHeader("═══ Scan Repository for Packages ═══")
 
-    if (config.githubRepo.isEmpty()) {
-        section {
-            red { textLine("GitHub repository not configured. Please configure first.") }
-        }.run()
-        return config
-    }
-
-    val gitManager = GitManager(config)
-    val gitResult = gitManager.initializeRepo()
-
-    if (gitResult.isFailure) {
-        section {
-            red { textLine("Error initializing repository: ${gitResult.exceptionOrNull()?.message}") }
-        }.run()
-        return config
-    }
-
     section {
-        textLine("Scanning repository for package bundles...")
+        textLine("Scanning repository for pkg bundles...")
     }.run()
 
-    val packageManager = PackageManager(config)
-    val scanResult = packageManager.scanRepoForPackages()
+    val result = ConfigManager.scanRepoForPackages(config)
 
-    return if (scanResult.isSuccess) {
-        val bundles = scanResult.getOrNull() ?: emptyList()
-        val newConfig = config.copy(packageBundles = bundles)
+    return if (result.isSuccess) {
+        val newConfig = result.getOrThrow()
         saveConfig(newConfig)
 
         section {
-            green { textLine("✓ Found ${bundles.size} package bundle(s)") }
-            bundles.forEach { bundle ->
+            green { textLine("✓ Found ${newConfig.packageBundles.size} pkg bundle(s)") }
+            newConfig.packageBundles.forEach { bundle ->
                 text("  • ")
                 cyan { text(bundle.name) }
                 text(" (${bundle.source})")
@@ -116,9 +83,26 @@ fun Session.scanRepoForPackages(config: FilameConfig): FilameConfig {
         }.run()
         newConfig
     } else {
-        section {
-            red { textLine("Error scanning repository: ${scanResult.exceptionOrNull()?.message}") }
-        }.run()
+        showError(
+            when (val ex = result.exceptionOrNull()) {
+                is IllegalStateException -> {
+                    "GitHub repository not configured. Please configure first."
+                }
+
+                is GitException -> {
+                    when (val err = ex.error) {
+                        GitError.RepoNotConfigured -> "GitHub repository not configured. Please configure first."
+                        is GitError.IoError -> "I/O error preparing repository: ${err.message}"
+                        is GitError.GitApi -> "Git error preparing repository: ${err.message}"
+                        else -> "Error scanning repository: ${ex.message}"
+                    }
+                }
+
+                else -> {
+                    "Error scanning repository: ${ex?.message}"
+                }
+            },
+        )
         config
     }
 }

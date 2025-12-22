@@ -1,4 +1,4 @@
-package xyz.malefic.filame.`package`
+package xyz.malefic.filame.pkg
 
 import java.io.File
 

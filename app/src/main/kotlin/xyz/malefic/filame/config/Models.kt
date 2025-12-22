@@ -39,12 +39,12 @@ data class ConfigFile(
 )
 
 /**
- * Represents a package bundle with its configuration files.
+ * Represents a pkg bundle with its configuration files.
  *
- * @property name The name of the package bundle.
- * @property source The source of the package bundle. Defaults to "official".
- * @property description An optional description of the package bundle. Defaults to an empty string.
- * @property configFiles A list of `ConfigFile` objects associated with the package bundle. Defaults to an empty list.
+ * @property name The name of the pkg bundle.
+ * @property source The source of the pkg bundle. Defaults to "official".
+ * @property description An optional description of the pkg bundle. Defaults to an empty string.
+ * @property configFiles A list of `ConfigFile` objects associated with the pkg bundle. Defaults to an empty list.
  */
 @Serializable
 data class PackageBundle(
