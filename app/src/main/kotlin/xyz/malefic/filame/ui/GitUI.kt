@@ -1,9 +1,3 @@
-/**
- * Git synchronization user interface components for Filame.
- * 
- * This file contains UI-only functions for Git operations including pull and push.
- * All business logic is delegated to [xyz.malefic.filame.git.GitManager].
- */
 package xyz.malefic.filame.ui
 
 import com.varabyte.kotter.foundation.text.cyan
@@ -18,7 +12,7 @@ import xyz.malefic.filame.git.GitManager
 
 /**
  * Display a submenu for Git synchronization operations.
- * 
+ *
  * Presents options to pull from or push to GitHub, handling user input
  * and delegating to the appropriate sync functions.
  *
@@ -56,7 +50,7 @@ fun Session.syncWithGitHub(config: FilameConfig): FilameConfig {
 
 /**
  * Pull latest changes from GitHub and display the result.
- * 
+ *
  * Delegates to [GitManager.syncPull] for the actual operation and renders
  * appropriate success or error messages based on the result.
  *
@@ -96,7 +90,7 @@ fun Session.syncPull(config: FilameConfig): FilameConfig {
 
 /**
  * Push local changes to GitHub and display the result.
- * 
+ *
  * Prompts for a commit message, delegates to [GitManager.syncPush] for the actual
  * operation (including credential prompting if needed), and renders appropriate
  * success or error messages based on the result.
@@ -116,11 +110,12 @@ fun Session.syncPush(config: FilameConfig): FilameConfig {
     section { textLine("Committing and pushing changes...") }.run()
 
     val gitManager = GitManager(config)
-    val result = gitManager.syncPush(
-        commitMessage = message,
-        credentialProvider = { promptCredentials() },
-        saveCredentialsIfUsed = true,
-    )
+    val result =
+        gitManager.syncPush(
+            commitMessage = message,
+            credentialProvider = { promptCredentials() },
+            saveCredentialsIfUsed = true,
+        )
 
     if (result.isSuccess) {
         showSuccess("✓ Successfully pushed changes to GitHub")
@@ -132,17 +127,21 @@ fun Session.syncPush(config: FilameConfig): FilameConfig {
         GitError.RepoNotConfigured -> {
             showError("GitHub repository not configured. Please configure it in settings.")
         }
+
         is GitError.CommitFailed -> {
             showError("Error committing: ${err.message}")
         }
+
         is GitError.SaveCredentialsFailed -> {
             showSuccess("✓ Successfully pushed changes to GitHub with provided credentials")
             showError("Warning: ${err.message}")
         }
+
         is GitError.PushFailed -> {
             showError("Error pushing to GitHub: ${err.message}")
             showError("Ensure the token has repo permissions and the username/token are correct")
         }
+
         else -> {
             showError("Error during push: ${err?.toString() ?: result.exceptionOrNull()?.message}")
         }

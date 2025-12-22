@@ -1,10 +1,3 @@
-/**
- * Main menu user interface for Filame.
- * 
- * This file contains the main interactive menu that serves as the entry point
- * for all application features. It orchestrates calls to other UI components
- * while maintaining the application state.
- */
 package xyz.malefic.filame.ui
 
 import com.varabyte.kotter.foundation.input.Keys
@@ -22,7 +15,7 @@ import xyz.malefic.filame.config.FilameConfig
 
 /**
  * Display and manage the main application menu.
- * 
+ *
  * Renders an interactive menu with keyboard navigation, allowing users to select
  * various operations including configuration, package management, and Git synchronization.
  * The menu loops until the user chooses to exit.

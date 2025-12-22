@@ -285,10 +285,9 @@ class PackageManager(
         // Prepare repo (clone/open)
         val prep = config.prepareGitRepo()
         if (prep.isFailure) {
-            // propagate existing GitException or wrap
-            val ex = prep.exceptionOrNull() as? GitException
             return Result.failure(
-                ex ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
+                prep.exceptionOrNull() as? GitException
+                    ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
             )
         }
 
@@ -330,9 +329,9 @@ class PackageManager(
     ): Result<Pair<Int, Int>> {
         val prep = config.prepareGitRepo()
         if (prep.isFailure) {
-            val ex = prep.exceptionOrNull() as? GitException
             return Result.failure(
-                ex ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
+                prep.exceptionOrNull() as? GitException
+                    ?: GitException(GitError.GitApi(prep.exceptionOrNull()?.message ?: "Unknown error"), prep.exceptionOrNull()),
             )
         }
 

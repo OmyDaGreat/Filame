@@ -1,10 +1,3 @@
-/**
- * Package management user interface components for Filame.
- * 
- * This file contains UI-only functions for package operations including listing,
- * adding/editing bundles, installing packages, and exporting configurations.
- * All business logic is delegated to [xyz.malefic.filame.pkg.PackageManager].
- */
 package xyz.malefic.filame.ui
 
 import com.varabyte.kotter.foundation.input.Completions
@@ -194,7 +187,7 @@ fun Session.addOrEditPackageBundle(config: FilameConfig): FilameConfig {
 
 /**
  * Install a selected package and apply its configuration files.
- * 
+ *
  * Displays available packages, prompts the user to select one, installs it
  * (including AUR helper if needed), and applies configuration files from the repository.
  *
@@ -267,7 +260,7 @@ fun Session.installPackageWithConfig(config: FilameConfig) {
 
 /**
  * Install all missing packages tracked in the configuration.
- * 
+ *
  * Checks which tracked packages are not installed and installs them all,
  * automatically handling AUR helper installation if required for AUR packages.
  *
@@ -307,7 +300,7 @@ fun Session.installAllMissingPackages(config: FilameConfig) {
 
 /**
  * Update all system packages (official and AUR).
- * 
+ *
  * Delegates to the package manager to update all installed packages system-wide.
  *
  * @receiver The Kotter session for UI rendering.
@@ -329,7 +322,7 @@ fun Session.updateAllPackages(config: FilameConfig) {
 
 /**
  * Export all package configurations to the GitHub repository.
- * 
+ *
  * Exports configuration files and metadata for all tracked packages and pushes
  * them to the configured GitHub repository.
  *
@@ -337,10 +330,7 @@ fun Session.updateAllPackages(config: FilameConfig) {
  * @param config The current application configuration.
  */
 fun Session.exportPackageConfigs(config: FilameConfig) {
-    section {
-        cyan { textLine("═══ Export Package Configurations ═══") }
-        textLine()
-    }.run()
+    displayHeader("═══ Export Package Configurations ═══")
 
     if (config.githubRepo.isEmpty()) {
         showError("GitHub repository not configured. Please configure first.")
@@ -368,7 +358,7 @@ fun Session.exportPackageConfigs(config: FilameConfig) {
 
 /**
  * Prompt user to select and install an AUR helper.
- * 
+ *
  * Displays a warning, prompts the user to choose between yay and paru,
  * and attempts to install the selected helper.
  *

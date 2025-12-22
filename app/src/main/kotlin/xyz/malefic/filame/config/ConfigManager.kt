@@ -12,7 +12,7 @@ import java.io.File
  * - Loading and saving configuration files
  * - Updating configuration settings
  * - Scanning Git repositories for package bundles
- * 
+ *
  * All functions return [Result] types to allow the UI layer to handle errors appropriately.
  */
 object ConfigManager {
@@ -36,7 +36,7 @@ object ConfigManager {
 
     /**
      * Load existing configuration from file or create a new default configuration.
-     * 
+     *
      * Reads and deserializes the YAML configuration file if it exists, otherwise
      * returns a new default [FilameConfig] instance.
      *
@@ -58,7 +58,7 @@ object ConfigManager {
 
     /**
      * Save configuration to file.
-     * 
+     *
      * Serializes the configuration to YAML format and writes it to the config file.
      *
      * @param config The configuration to save.
@@ -75,7 +75,7 @@ object ConfigManager {
 
     /**
      * Update device and repository settings in the configuration.
-     * 
+     *
      * Creates a new configuration instance with updated device name and GitHub repository URL.
      *
      * @param config The current configuration.
@@ -95,7 +95,7 @@ object ConfigManager {
 
     /**
      * Scan the Git repository for package bundles.
-     * 
+     *
      * Clones or opens the configured GitHub repository, scans it for package bundles,
      * and returns an updated configuration with the discovered packages. The Git
      * repository is automatically closed after the operation.

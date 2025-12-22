@@ -157,15 +157,8 @@ class GitManager(
         }
 
     /**
-     * Retrieves the directory where the repository is stored.
-     *
-     * @return The `File` object representing the repository directory.
-     */
-    fun getRepoDir(): File = repoDir
-
-    /**
      * Save credentials to ~/.git-credentials and attempt to enable the Git credential store helper.
-     * This is non-UI logic and returns a Result so callers can decide how to surface errors.
+     * This is non-UI logic and returns a [Result] so callers can decide how to surface errors.
      */
     fun saveCredentials(
         username: String,
@@ -288,7 +281,7 @@ class GitManager(
 
     /**
      * Perform a Git pull operation.
-     * 
+     *
      * Prepares the git repository and pulls the latest changes from the remote.
      * Automatically closes the Git instance after the operation completes.
      *
@@ -309,7 +302,7 @@ class GitManager(
 
     /**
      * Perform a Git push operation with commit.
-     * 
+     *
      * Prepares the git repository, commits changes with the provided message, and pushes to remote.
      * Supports credential prompting via callback and credential persistence.
      * Automatically closes the Git instance after the operation completes.
