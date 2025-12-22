@@ -294,7 +294,7 @@ Example:
 [source,bash]
 ----
 ✓ Package bundle added successfully!
-✓ Package metadata exported to repo: vim/package.yaml
+✓ Package metadata exported to repo: vim/pkg.yaml
 ----
 
 === From Repo → Local (Import)

@@ -1,9 +1,20 @@
-package xyz.malefic
+package xyz.malefic.filame.pkg
 
+import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import com.charleskorn.kaml.Yaml
+import xyz.malefic.filame.config.ConfigFile
+import xyz.malefic.filame.config.FilameConfig
+import xyz.malefic.filame.config.PackageBundle
+import xyz.malefic.filame.git.GitError
+import xyz.malefic.filame.git.GitManager
+import xyz.malefic.filame.git.prepareGitRepo
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Manages package operations including installation, removal, and tracking
@@ -13,83 +24,25 @@ class PackageManager(
     private val repoDir: File = File(System.getProperty("user.home"), ".config/filame/repo"),
 ) {
     /**
-     * Check if paru is installed
+     * Check if any AUR helper is installed
      */
-    fun isParuInstalled(): Boolean =
-        try {
-            val process = ProcessBuilder("which", "paru").start()
-            process.waitFor() == 0
-        } catch (_: Exception) {
-            false
-        }
+    fun isAurHelperInstalled() = AurHelperManager.isAnyInstalled()
 
     /**
-     * Install paru AUR helper
+     * Get the installed AUR helper (yay takes priority over paru), or null if neither is installed
      */
-    fun installParu(): Result<Unit> {
-        return try {
-            if (isParuInstalled()) {
-                return Result.success(Unit)
-            }
+    fun getAurHelper() = AurHelperManager.getInstalled()
 
-            // Install dependencies
-            val deps = arrayOf("git", "base-devel")
-            for (dep in deps) {
-                val checkProcess = ProcessBuilder("pacman", "-Qq", dep).start()
-                if (checkProcess.waitFor() != 0) {
-                    val installProcess =
-                        ProcessBuilder("sudo", "pacman", "-S", "--noconfirm", dep)
-                            .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                            .redirectError(ProcessBuilder.Redirect.INHERIT)
-                            .start()
-                    if (installProcess.waitFor() != 0) {
-                        return Result.failure(Exception("Failed to install $dep"))
-                    }
-                }
-            }
-
-            // Clone and build paru
-            val tmpDir = File("/tmp/paru-install-${System.currentTimeMillis()}")
-            tmpDir.mkdirs()
-
-            val cloneProcess =
-                ProcessBuilder("git", "clone", "https://aur.archlinux.org/paru.git")
-                    .directory(tmpDir)
-                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                    .redirectError(ProcessBuilder.Redirect.INHERIT)
-                    .start()
-
-            if (cloneProcess.waitFor() != 0) {
-                tmpDir.deleteRecursively()
-                return Result.failure(Exception("Failed to clone paru repository"))
-            }
-
-            val paruDir = File(tmpDir, "paru")
-            val buildProcess =
-                ProcessBuilder("makepkg", "-si", "--noconfirm")
-                    .directory(paruDir)
-                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                    .redirectError(ProcessBuilder.Redirect.INHERIT)
-                    .start()
-
-            val exitCode = buildProcess.waitFor()
-            tmpDir.deleteRecursively()
-
-            if (exitCode != 0) {
-                return Result.failure(Exception("Failed to build and install paru"))
-            }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    /**
+     * Install an AUR helper
+     */
+    fun installAurHelper(helper: AurHelper) = AurHelperManager.install(helper)
 
     /**
      * Search for packages in official repos and AUR
      */
-    fun searchPackages(query: String): Result<List<PackageSearchResult>> =
-        try {
+    fun searchPackages(query: String): Either<String, List<PackageSearchResult>> =
+        either<Throwable, List<PackageSearchResult>> {
             val results = mutableListOf<PackageSearchResult>()
 
             // Search official repos with pacman
@@ -120,17 +73,18 @@ class PackageManager(
             }
             pacmanProcess.waitFor()
 
-            // Search AUR with paru if available
-            if (isParuInstalled()) {
-                val paruProcess =
-                    ProcessBuilder("paru", "-Ssa", query)
+            // Search AUR with yay or paru if available
+            val aurHelper = getAurHelper()
+            if (aurHelper != null) {
+                val aurProcess =
+                    ProcessBuilder(aurHelper.command, "-Ssa", query)
                         .redirectError(ProcessBuilder.Redirect.INHERIT)
                         .start()
 
-                val paruReader = BufferedReader(InputStreamReader(paruProcess.inputStream))
+                val aurReader = BufferedReader(InputStreamReader(aurProcess.inputStream))
                 currentPackage = null
 
-                while (paruReader.readLine().also { line = it } != null) {
+                while (aurReader.readLine().also { line = it } != null) {
                     if (line!!.startsWith(" ")) {
                         // This is a description line
                         if (currentPackage != null) {
@@ -149,13 +103,11 @@ class PackageManager(
                         }
                     }
                 }
-                paruProcess.waitFor()
+                aurProcess.waitFor()
             }
 
-            Result.success(results)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+            results
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Check if a package is installed
@@ -179,14 +131,15 @@ class PackageManager(
     /**
      * Install a package
      */
-    fun installPackage(pkg: PackageBundle): Result<Unit> {
-        return try {
+    fun installPackage(pkg: PackageBundle): Either<String, Unit> =
+        either<Throwable, Unit> {
             val command =
                 if (pkg.source == "aur") {
-                    if (!isParuInstalled()) {
-                        return Result.failure(Exception("Paru is required for AUR packages but not installed"))
+                    val aurHelper = getAurHelper()
+                    ensure(aurHelper != null) {
+                        raise(Exception("An AUR helper (yay or paru) is required for AUR packages but not installed"))
                     }
-                    arrayOf("paru", "-S", "--noconfirm", pkg.name)
+                    arrayOf(aurHelper.command, "-S", "--noconfirm", pkg.name)
                 } else {
                     arrayOf("sudo", "pacman", "-S", "--noconfirm", pkg.name)
                 }
@@ -199,43 +152,36 @@ class PackageManager(
 
             val exitCode = process.waitFor()
 
-            if (exitCode != 0) {
-                Result.failure(Exception("Failed to install package ${pkg.name}"))
-            } else {
-                Result.success(Unit)
+            ensure(exitCode == 0) {
+                raise(Exception("Failed to install package ${pkg.name}"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Install all tracked packages that are not yet installed
      */
-    fun installMissingPackages(): Result<List<String>> {
-        val installed = mutableListOf<String>()
-        val statuses = getPackageStatuses()
+    fun installMissingPackages(): Either<String, List<String>> =
+        either {
+            val installed = mutableListOf<String>()
+            val statuses = getPackageStatuses()
 
-        for ((pkg, isInstalled) in statuses) {
-            if (!isInstalled) {
-                val result = installPackage(pkg)
-                if (result.isSuccess) {
+            for ((pkg, isInstalled) in statuses) {
+                if (!isInstalled) {
+                    installPackage(pkg).bind()
                     installed.add(pkg.name)
-                } else {
-                    return Result.failure(result.exceptionOrNull()!!)
                 }
             }
-        }
 
-        return Result.success(installed)
-    }
+            installed
+        }
 
     /**
      * Apply configuration files for a package bundle
      */
-    fun applyPackageConfig(bundle: PackageBundle): Result<List<String>> {
-        val appliedFiles = mutableListOf<String>()
-        try {
+    fun applyPackageConfig(bundle: PackageBundle): Either<String, List<String>> =
+        either<Throwable, List<String>> {
+            val appliedFiles = mutableListOf<String>()
+
             for (configFile in bundle.configFiles) {
                 val source = File(repoDir, configFile.destinationPath)
                 if (!source.exists()) {
@@ -245,25 +191,24 @@ class PackageManager(
                 val destination = File(configFile.sourcePath)
                 destination.parentFile?.mkdirs()
 
-                java.nio.file.Files.copy(
+                Files.copy(
                     source.toPath(),
                     destination.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.REPLACE_EXISTING,
                 )
                 appliedFiles.add(configFile.sourcePath)
             }
-            return Result.success(appliedFiles)
-        } catch (e: Exception) {
-            return Result.failure(e)
-        }
-    }
+
+            appliedFiles
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Export configuration files for a package bundle to repo
      */
-    fun exportPackageConfig(bundle: PackageBundle): Result<List<String>> {
-        val exportedFiles = mutableListOf<String>()
-        try {
+    fun exportPackageConfig(bundle: PackageBundle): Either<String, List<String>> =
+        either<Throwable, List<String>> {
+            val exportedFiles = mutableListOf<String>()
+
             for (configFile in bundle.configFiles) {
                 val source = File(configFile.sourcePath)
                 if (!source.exists()) {
@@ -273,25 +218,23 @@ class PackageManager(
                 val destination = File(repoDir, configFile.destinationPath)
                 destination.parentFile?.mkdirs()
 
-                java.nio.file.Files.copy(
+                Files.copy(
                     source.toPath(),
                     destination.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.REPLACE_EXISTING,
                 )
                 exportedFiles.add(configFile.destinationPath)
             }
-            return Result.success(exportedFiles)
-        } catch (e: Exception) {
-            return Result.failure(e)
-        }
-    }
+
+            exportedFiles
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Export package bundle metadata to repo as package.yaml
      * This enables two-way sync of package configurations
      */
-    fun exportPackageMetadata(bundle: PackageBundle): Result<String> =
-        try {
+    fun exportPackageMetadata(bundle: PackageBundle): Either<String, String> =
+        either<Throwable, String> {
             // Determine the package directory name from config files or use the package name
             val packageDirName =
                 if (bundle.configFiles.isNotEmpty()) {
@@ -313,21 +256,100 @@ class PackageManager(
                 )
             metadataFile.writeText(yaml)
 
-            Result.success(metadataFile.relativeTo(repoDir).path)
-        } catch (e: Exception) {
-            Result.failure(e)
+            metadataFile.relativeTo(repoDir).path
+        }.mapLeft { it.message ?: "Unknown error" }
+
+    /**
+     * High-level: export bundle's config files + metadata and push to remote.
+     */
+    fun exportBundleAndPush(
+        bundle: PackageBundle,
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Either<GitError, Unit> =
+        either {
+            val (gitManager, git) = config.prepareGitRepo().bind()
+            try {
+                exportPackageConfig(bundle).mapLeft { GitError.IoError(it) }.bind()
+                exportPackageMetadata(bundle).mapLeft { GitError.IoError(it) }.bind()
+                gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+            } finally {
+                try {
+                    git.close()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+    /**
+     * Export all tracked package configs / metadata and push as a single commit.
+     * Returns a Pair(totalConfigFilesExported, metadataBundlesExported) on success.
+     */
+    fun exportAllAndPush(
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Either<GitError, Pair<Int, Int>> =
+        either {
+            val (_, git) = config.prepareGitRepo().bind()
+            var totalExported = 0
+            var metadataExported = 0
+            try {
+                for (bundle in config.packageBundles) {
+                    val exported = exportPackageConfig(bundle).mapLeft { GitError.IoError(it) }.bind()
+                    totalExported += exported.size
+
+                    exportPackageMetadata(bundle).mapLeft { GitError.IoError(it) }.bind()
+                    metadataExported++
+                }
+
+                GitManager(config).pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+
+                totalExported to metadataExported
+            } finally {
+                try {
+                    git.close()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+    /**
+     * Export a single bundle (configs + metadata), push to remote, and return the metadata file path relative to the repo.
+     * This mirrors exportBundleAndPush but returns the metadata path for UI consumption.
+     */
+    fun exportBundleAndPushWithMetadata(
+        bundle: PackageBundle,
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Either<GitError, String> =
+        either {
+            val (gitManager, git) = config.prepareGitRepo().bind()
+            try {
+                exportPackageConfig(bundle).mapLeft { GitError.IoError(it) }.bind()
+                val metadataPath = exportPackageMetadata(bundle).mapLeft { GitError.IoError(it) }.bind()
+                gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed).bind()
+                metadataPath
+            } finally {
+                try {
+                    git.close()
+                } catch (_: Exception) {
+                }
+            }
         }
 
     /**
      * Scan repository directory for package bundles
      * Looks for directories with package metadata and config files
      */
-    fun scanRepoForPackages(): Result<List<PackageBundle>> {
-        return try {
+    fun scanRepoForPackages(): Either<String, List<PackageBundle>> =
+        either<Throwable, List<PackageBundle>> {
             val bundles = mutableListOf<PackageBundle>()
 
             if (!repoDir.exists()) {
-                return Result.success(emptyList())
+                return@either emptyList()
             }
 
             // Look for package directories (each subdirectory is a potential package)
@@ -376,17 +398,14 @@ class PackageManager(
                 }
             }
 
-            Result.success(bundles)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+            bundles
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Update all installed packages
      */
-    fun updatePackages(): Result<Unit> {
-        return try {
+    fun updatePackages(): Either<String, Unit> =
+        either<Throwable, Unit> {
             // Update official packages
             val pacmanProcess =
                 ProcessBuilder("sudo", "pacman", "-Syu", "--noconfirm")
@@ -394,34 +413,30 @@ class PackageManager(
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .start()
 
-            if (pacmanProcess.waitFor() != 0) {
-                return Result.failure(Exception("Failed to update official packages"))
+            ensure(pacmanProcess.waitFor() == 0) {
+                raise(Exception("Failed to update official packages"))
             }
 
-            // Update AUR packages if paru is installed
-            if (isParuInstalled()) {
-                val paruProcess =
-                    ProcessBuilder("paru", "-Sua", "--noconfirm")
+            // Update AUR packages if yay or paru is installed
+            val aurHelper = getAurHelper()
+            if (aurHelper != null) {
+                val aurProcess =
+                    ProcessBuilder(aurHelper.command, "-Sua", "--noconfirm")
                         .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                         .redirectError(ProcessBuilder.Redirect.INHERIT)
                         .start()
 
-                if (paruProcess.waitFor() != 0) {
-                    return Result.failure(Exception("Failed to update AUR packages"))
+                ensure(aurProcess.waitFor() == 0) {
+                    raise(Exception("Failed to update AUR packages"))
                 }
             }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+        }.mapLeft { it.message ?: "Unknown error" }
 
     /**
      * Remove a package
      */
-    fun removePackage(packageName: String): Result<Unit> =
-        try {
+    fun removePackage(packageName: String): Either<String, Unit> =
+        either<Throwable, Unit> {
             val process =
                 ProcessBuilder("sudo", "pacman", "-R", "--noconfirm", packageName)
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT)
@@ -430,21 +445,8 @@ class PackageManager(
 
             val exitCode = process.waitFor()
 
-            if (exitCode != 0) {
-                Result.failure(Exception("Failed to remove package $packageName"))
-            } else {
-                Result.success(Unit)
+            ensure(exitCode == 0) {
+                raise(Exception("Failed to remove package $packageName"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        }.mapLeft { it.message ?: "Unknown error" }
 }
-
-/**
- * Search result for a package
- */
-data class PackageSearchResult(
-    val name: String,
-    val source: String,
-    val description: String,
-)

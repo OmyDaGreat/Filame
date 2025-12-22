@@ -34,7 +34,7 @@ java {
 }
 
 application {
-    mainClass = "xyz.malefic.RunnerKt"
+    mainClass = "xyz.malefic.filame.MainKt"
 }
 
 tasks.shadowJar {
