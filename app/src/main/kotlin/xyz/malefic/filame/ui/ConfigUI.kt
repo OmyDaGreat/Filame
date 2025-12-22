@@ -1,3 +1,10 @@
+/**
+ * Configuration user interface components for Filame.
+ * 
+ * This file contains UI-only functions for configuration management including
+ * loading/saving configuration, updating settings, and scanning repositories.
+ * All business logic is delegated to [xyz.malefic.filame.config.ConfigManager].
+ */
 package xyz.malefic.filame.ui
 
 import com.varabyte.kotter.foundation.text.cyan
@@ -11,7 +18,13 @@ import xyz.malefic.filame.git.GitError
 import xyz.malefic.filame.git.GitException
 
 /**
- * Load existing config or create a new one
+ * Load existing configuration from disk or create a new default one.
+ * 
+ * Delegates to [ConfigManager.loadOrCreateConfig] and displays error messages
+ * if loading fails. Returns a default configuration as fallback.
+ *
+ * @receiver The Kotter session for UI rendering.
+ * @return The loaded or default configuration.
  */
 fun Session.loadOrCreateConfig(): FilameConfig {
     val result = ConfigManager.loadOrCreateConfig()
@@ -24,7 +37,13 @@ fun Session.loadOrCreateConfig(): FilameConfig {
 }
 
 /**
- * Save configuration to file
+ * Save configuration to disk and display the result.
+ * 
+ * Delegates to [ConfigManager.saveConfig] and shows a success or error message
+ * based on the result.
+ *
+ * @receiver The Kotter session for UI rendering.
+ * @param config The configuration to save.
  */
 fun Session.saveConfig(config: FilameConfig) {
     ConfigManager.saveConfig(config).apply {
@@ -37,7 +56,14 @@ fun Session.saveConfig(config: FilameConfig) {
 }
 
 /**
- * Configure device and repository settings
+ * Interactively configure device and repository settings.
+ * 
+ * Prompts the user for device name and GitHub repository URL, updates the
+ * configuration with [ConfigManager.updateSettings], and saves it to disk.
+ *
+ * @receiver The Kotter session for UI rendering and user input.
+ * @param config The current configuration.
+ * @return The updated configuration.
  */
 fun Session.configureSettings(config: FilameConfig): FilameConfig {
     displayHeader("═══ Configure Settings ═══")
@@ -54,7 +80,14 @@ fun Session.configureSettings(config: FilameConfig): FilameConfig {
 }
 
 /**
- * Scan repository for pkg bundles
+ * Scan the GitHub repository for package bundles and update configuration.
+ * 
+ * Displays progress, delegates to [ConfigManager.scanRepoForPackages] for the
+ * actual scanning, and renders the discovered packages or error messages.
+ *
+ * @receiver The Kotter session for UI rendering.
+ * @param config The current configuration.
+ * @return The updated configuration with discovered packages, or the original if scanning failed.
  */
 fun Session.scanRepoForPackages(config: FilameConfig): FilameConfig {
     displayHeader("═══ Scan Repository for Packages ═══")

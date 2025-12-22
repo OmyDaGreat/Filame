@@ -6,10 +6,14 @@ import xyz.malefic.filame.pkg.PackageManager
 import java.io.File
 
 /**
- * Manager responsible for handling Filame's configuration storage.
+ * Manager responsible for handling Filame's configuration storage and operations.
  *
- * Provides accessors for the configuration directory and file, plus helpers
- * to create the directory and check for the presence of the config file.
+ * This object provides all non-UI configuration management functionality including:
+ * - Loading and saving configuration files
+ * - Updating configuration settings
+ * - Scanning Git repositories for package bundles
+ * 
+ * All functions return [Result] types to allow the UI layer to handle errors appropriately.
  */
 object ConfigManager {
     /** Directory under the user's home where Filame stores configuration (for example `~/.config/filame`). */
@@ -31,7 +35,13 @@ object ConfigManager {
     }
 
     /**
-     * Load existing config or create a new one
+     * Load existing configuration from file or create a new default configuration.
+     * 
+     * Reads and deserializes the YAML configuration file if it exists, otherwise
+     * returns a new default [FilameConfig] instance.
+     *
+     * @return A [Result] containing the loaded or default configuration, or a failure
+     *         with the exception if deserialization fails.
      */
     fun loadOrCreateConfig(): Result<FilameConfig> =
         if (configFile.exists()) {
@@ -47,7 +57,12 @@ object ConfigManager {
         }
 
     /**
-     * Save configuration to file
+     * Save configuration to file.
+     * 
+     * Serializes the configuration to YAML format and writes it to the config file.
+     *
+     * @param config The configuration to save.
+     * @return A [Result] indicating success or failure with the exception.
      */
     fun saveConfig(config: FilameConfig): Result<Unit> =
         try {
@@ -59,7 +74,14 @@ object ConfigManager {
         }
 
     /**
-     * Update device and repository settings
+     * Update device and repository settings in the configuration.
+     * 
+     * Creates a new configuration instance with updated device name and GitHub repository URL.
+     *
+     * @param config The current configuration.
+     * @param deviceName The new device name.
+     * @param githubRepo The new GitHub repository URL.
+     * @return A new [FilameConfig] with the updated settings.
      */
     fun updateSettings(
         config: FilameConfig,
@@ -72,7 +94,15 @@ object ConfigManager {
         )
 
     /**
-     * Scan repository for pkg bundles
+     * Scan the Git repository for package bundles.
+     * 
+     * Clones or opens the configured GitHub repository, scans it for package bundles,
+     * and returns an updated configuration with the discovered packages. The Git
+     * repository is automatically closed after the operation.
+     *
+     * @param config The current configuration containing the GitHub repository URL.
+     * @return A [Result] containing the updated configuration with discovered packages,
+     *         or a failure if the repository is not configured or scanning fails.
      */
     fun scanRepoForPackages(config: FilameConfig): Result<FilameConfig> {
         if (config.githubRepo.isEmpty()) {

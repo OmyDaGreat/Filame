@@ -285,6 +285,56 @@ class GitManager(
 
         return tryPushWithOptionalCredentials(git, username, token, saveCredentialsIfUsed)
     }
+
+    /**
+     * Perform a Git pull operation.
+     * 
+     * Prepares the git repository and pulls the latest changes from the remote.
+     * Automatically closes the Git instance after the operation completes.
+     *
+     * @return A `Result` indicating success or failure with appropriate [GitException].
+     */
+    fun syncPull(): Result<Unit> {
+        val prepResult = config.prepareGitRepo()
+        if (prepResult.isFailure) {
+            return Result.failure(prepResult.exceptionOrNull() ?: Exception("Failed to prepare git repo"))
+        }
+
+        val (gitManager, git) = prepResult.getOrThrow()
+        val pullResult = gitManager.pull(git)
+        git.close()
+
+        return pullResult
+    }
+
+    /**
+     * Perform a Git push operation with commit.
+     * 
+     * Prepares the git repository, commits changes with the provided message, and pushes to remote.
+     * Supports credential prompting via callback and credential persistence.
+     * Automatically closes the Git instance after the operation completes.
+     *
+     * @param commitMessage The commit message to use.
+     * @param credentialProvider Optional callback invoked when credentials are needed for push.
+     * @param saveCredentialsIfUsed Whether to persist credentials when push succeeds with them.
+     * @return A `Result` indicating success or failure with appropriate [GitException].
+     */
+    fun syncPush(
+        commitMessage: String,
+        credentialProvider: (() -> Pair<String, String>?)? = null,
+        saveCredentialsIfUsed: Boolean = true,
+    ): Result<Unit> {
+        val prepResult = config.prepareGitRepo()
+        if (prepResult.isFailure) {
+            return Result.failure(prepResult.exceptionOrNull() ?: Exception("Failed to prepare git repo"))
+        }
+
+        val (gitManager, git) = prepResult.getOrThrow()
+        val result = gitManager.pushWithCommitAndRetry(git, commitMessage, credentialProvider, saveCredentialsIfUsed)
+        git.close()
+
+        return result
+    }
 }
 
 /**

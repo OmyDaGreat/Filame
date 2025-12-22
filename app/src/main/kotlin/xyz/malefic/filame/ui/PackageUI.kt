@@ -1,3 +1,10 @@
+/**
+ * Package management user interface components for Filame.
+ * 
+ * This file contains UI-only functions for package operations including listing,
+ * adding/editing bundles, installing packages, and exporting configurations.
+ * All business logic is delegated to [xyz.malefic.filame.pkg.PackageManager].
+ */
 package xyz.malefic.filame.ui
 
 import com.varabyte.kotter.foundation.input.Completions
@@ -79,22 +86,13 @@ fun Session.listPackageBundles(config: FilameConfig) {
 /**
  * Add or edit a package bundle interactively.
  *
- * Prompts the user for:
- *  - package name (required)
- *  - source (`official` or `aur`, defaults to `official`)
- *  - optional description
- *  - zero or more configuration files (each with source path, destination path and optional description)
+ * Prompts the user for package details including name, source, description, and
+ * configuration files. Validates input, updates the configuration, and optionally
+ * exports the bundle metadata to the GitHub repository.
  *
- * Behavior:
- *  - Validates the package name is non-empty.
- *  - Expands a leading tilde in config file source paths to the user's home directory.
- *  - If a bundle with the same name already exists in `config.packageBundles`, it is replaced.
- *  - Persists the updated configuration via `saveConfig`.
- *  - If `githubRepo` is configured, attempts to export the bundle metadata and push it to the repo.
- *    Git-related errors are handled and rendered to the session (push failures, credential save failures, etc.).
- *
- * @param config current [FilameConfig] to be modified
- * @return the updated [FilameConfig] (unchanged if the operation was aborted due to invalid input)
+ * @receiver The Kotter session for UI rendering and user input.
+ * @param config The current application configuration.
+ * @return The updated configuration, or the original if the operation was aborted.
  */
 fun Session.addOrEditPackageBundle(config: FilameConfig): FilameConfig {
     displayHeader("═══ Add/Edit Package Bundle ═══")
@@ -195,7 +193,13 @@ fun Session.addOrEditPackageBundle(config: FilameConfig): FilameConfig {
 }
 
 /**
- * Install a pkg and apply its configuration
+ * Install a selected package and apply its configuration files.
+ * 
+ * Displays available packages, prompts the user to select one, installs it
+ * (including AUR helper if needed), and applies configuration files from the repository.
+ *
+ * @receiver The Kotter session for UI rendering and user input.
+ * @param config The current application configuration.
  */
 fun Session.installPackageWithConfig(config: FilameConfig) {
     displayHeader("═══ Install Package & Apply Config ═══")
@@ -262,7 +266,13 @@ fun Session.installPackageWithConfig(config: FilameConfig) {
 }
 
 /**
- * Install all missing packages
+ * Install all missing packages tracked in the configuration.
+ * 
+ * Checks which tracked packages are not installed and installs them all,
+ * automatically handling AUR helper installation if required for AUR packages.
+ *
+ * @receiver The Kotter session for UI rendering.
+ * @param config The current application configuration.
  */
 fun Session.installAllMissingPackages(config: FilameConfig) {
     displayHeader("═══ Install All Missing Packages ═══")
@@ -296,7 +306,12 @@ fun Session.installAllMissingPackages(config: FilameConfig) {
 }
 
 /**
- * Update all packages
+ * Update all system packages (official and AUR).
+ * 
+ * Delegates to the package manager to update all installed packages system-wide.
+ *
+ * @receiver The Kotter session for UI rendering.
+ * @param config The current application configuration.
  */
 fun Session.updateAllPackages(config: FilameConfig) {
     displayHeader("═══ Update All Packages ═══", "This will update all system packages (official + AUR)")
@@ -313,7 +328,13 @@ fun Session.updateAllPackages(config: FilameConfig) {
 }
 
 /**
- * Export pkg configurations to repo
+ * Export all package configurations to the GitHub repository.
+ * 
+ * Exports configuration files and metadata for all tracked packages and pushes
+ * them to the configured GitHub repository.
+ *
+ * @receiver The Kotter session for UI rendering.
+ * @param config The current application configuration.
  */
 fun Session.exportPackageConfigs(config: FilameConfig) {
     section {
@@ -346,7 +367,14 @@ fun Session.exportPackageConfigs(config: FilameConfig) {
 }
 
 /**
- * Helper function to install an AUR helper
+ * Prompt user to select and install an AUR helper.
+ * 
+ * Displays a warning, prompts the user to choose between yay and paru,
+ * and attempts to install the selected helper.
+ *
+ * @receiver The Kotter session for UI rendering and user input.
+ * @param packageManager The package manager instance to use for installation.
+ * @return `true` if the operation was aborted or failed, `false` if installation succeeded.
  */
 private fun Session.installAURHelper(packageManager: PackageManager): Boolean {
     showWarning("An AUR helper is required for AUR packages but not installed.")

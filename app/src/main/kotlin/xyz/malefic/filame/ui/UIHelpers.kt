@@ -1,3 +1,10 @@
+/**
+ * Utility functions and helpers for Kotter-based UI components.
+ * 
+ * This file provides reusable UI helper functions for displaying headers,
+ * reading user input, showing messages, and prompting for credentials.
+ * These are pure UI utilities with no business logic.
+ */
 package xyz.malefic.filame.ui
 
 import com.varabyte.kotter.foundation.input.Completions
