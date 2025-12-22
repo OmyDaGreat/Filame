@@ -29,13 +29,11 @@ fun main(vararg args: String) =
         ConfigManager.ensureConfigDir()
         val config = loadOrCreateConfig()
 
-        // If no arguments provided, show interactive menu
         if (args.isEmpty()) {
             showMainMenu(config)
             return@session
         }
 
-        // Handle command-line arguments
         when (args[0].lowercase()) {
             "c", "configure", "config" -> {
                 configureSettings(config)
