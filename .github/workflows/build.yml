@@ -33,7 +33,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-artifacts
           path: |
@@ -44,7 +44,7 @@ jobs:
 
       - name: Upload build reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-reports
           path: |
